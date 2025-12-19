@@ -28,7 +28,7 @@ export const ProjectDetail: React.FC = () => {
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', dimensions: '', thickness: '', qtySet: 1, unit: 'PCS' });
   const [isBomModalOpen, setIsBomModalOpen] = useState<string | null>(null);
-  const [newBom, setNewBom] = useState({ materialId: '', qty: 1 });
+  const [newBom, setNewBom] = useState({ materialId: '', qty: 1.0 });
   const [bomMaterials, setBomMaterials] = useState<MaterialData[]>([]);
   const [bomMaterialsLoading, setBomMaterialsLoading] = useState(false);
 
@@ -1230,8 +1230,8 @@ export const ProjectDetail: React.FC = () => {
                   const bomPayload = {
                     item_id: isBomModalOpen!,
                     material_id: newBom.materialId,
-                    quantity_per_unit: newBom.qty,
-                    total_required: (item.quantity || 0) * newBom.qty,
+                    quantity_per_unit: parseFloat(newBom.qty.toString()),
+                    total_required: parseFloat(((item.quantity || 0) * newBom.qty).toString()),
                     allocated: 0,
                     realized: 0
                   };
@@ -1242,7 +1242,7 @@ export const ProjectDetail: React.FC = () => {
                       ...prev,
                       [isBomModalOpen!]: [...(prev[isBomModalOpen!] || []), response.data]
                     }));
-                    setNewBom({ materialId: '', qty: 1 });
+                    setNewBom({ materialId: '', qty: 1.0 });
                     setIsBomModalOpen(null);
                   } else {
                     setError(response.message || 'Gagal menambah BOM item');
@@ -1263,7 +1263,7 @@ export const ProjectDetail: React.FC = () => {
                  </div>
                  <div className="space-y-2">
                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Qty per Satu Unit (Pcs/Set)</label>
-                   <input required type="number" step="0.0001" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none focus:border-blue-500" placeholder="0.0000" value={newBom.qty} onChange={e => setNewBom({...newBom, qty: Number(e.target.value)})} />
+                   <input required type="number" step="any" min="0" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none focus:border-blue-500" placeholder="1.5" value={newBom.qty} onChange={e => setNewBom({...newBom, qty: parseFloat(e.target.value) || 0})} />
                  </div>
                  <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-[24px] font-black shadow-xl uppercase tracking-widest text-sm">TAMBAH KE DAFTAR BOM</button>
               </form>
