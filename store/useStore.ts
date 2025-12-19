@@ -160,7 +160,7 @@ export const useStore = create<AppState>((set, get) => ({
     const item = state.items.find(i => i.id === itemId);
     if (!item) return state;
     const newBom = { id: `bom-${Date.now()}`, itemId, materialId: matId, quantityPerUnit: qty, totalRequired: item.quantity * qty, allocated: 0, realized: 0 };
-    return { items: state.items.map(i => i.id === itemId ? { ...i, bom: [...i.bom, newBom] } : i) };
+    return { items: state.items.map(i => i.id === itemId ? { ...i, bom: [...(i.bom || []), newBom] } : i) };
   }),
 
   deleteBomItem: (itemId, bomId) => set((s) => ({

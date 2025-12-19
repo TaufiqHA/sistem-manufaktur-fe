@@ -39,9 +39,12 @@ export const Projects: React.FC = () => {
     setError(null);
     try {
       const response = await apiClient.getProjects();
-      if (response.success && response.data?.data) {
+      // Handle backend response structure: { data: [...] }
+      const projectsData = response.data?.data || response.data;
+
+      if (projectsData && Array.isArray(projectsData)) {
         // Transform API response to internal Project format
-        const transformedProjects = response.data.data.map(p => ({
+        const transformedProjects = projectsData.map(p => ({
           id: p.id?.toString() || `prj-${Math.random()}`,
           code: p.code,
           name: p.name,

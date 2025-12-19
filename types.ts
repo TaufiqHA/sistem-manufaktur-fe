@@ -1,5 +1,4 @@
-
-export type ProjectStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD';
+export type ProjectStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED';
 export type Shift = 'SHIFT_1' | 'SHIFT_2' | 'SHIFT_3';
 
 export interface Project {

@@ -1,53 +1,235 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../store/useStore';
+import { apiClient, TaskData } from '../lib/api';
 import { Play, Pause, Plus, Clock, Activity, AlertTriangle, CheckCircle2, ListFilter, History } from 'lucide-react';
 import { Task, Shift } from '../types';
 
 export const MachineBoard: React.FC = () => {
   const { machines, tasks, currentUser, logs, setTaskStatus, reportProduction, startDowntime, endDowntime } = useStore();
-  
-  // Logic: If Admin, can see all. If Operator, only their assigned machines.
-  const operatorMachines = useMemo(() => {
-    if (!currentUser) return [];
-    if (currentUser.role === 'ADMIN' || currentUser.role === 'MANAGER') return machines;
-    // Filter machines where current user is listed in personnel
-    return machines.filter(m => m.personnel?.some(p => p.name === currentUser.name));
-  }, [machines, currentUser]);
 
-  const [selectedMachineId, setSelectedMachineId] = useState<string>(operatorMachines[0]?.id || '');
+  const [apiMachines, setApiMachines] = useState<any[]>([]);
+  const [apiTasks, setApiTasks] = useState<TaskData[]>([]);
+  const [apiLogs, setApiLogs] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [machinesLoading, setMachinesLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [selectedMachineId, setSelectedMachineId] = useState<string>('');
   const [selectedShift, setSelectedShift] = useState<Shift>('SHIFT_1');
-  const [reportModal, setReportModal] = useState<Task | null>(null);
+  const [reportModal, setReportModal] = useState<TaskData | null>(null);
   const [qtyGood, setQtyGood] = useState<number>(0);
   const [qtyDefect, setQtyDefect] = useState<number>(0);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch machines from API on component mount
+  useEffect(() => {
+    const fetchMachines = async () => {
+      setMachinesLoading(true);
+      try {
+        const response = await apiClient.getMachines();
+        if (response.success && response.data) {
+          const machineList = Array.isArray(response.data) ? response.data : (response.data.data || []);
+
+          // Filter based on user role
+          let filteredMachines = machineList;
+          if (currentUser && currentUser.role !== 'ADMIN' && currentUser.role !== 'MANAGER') {
+            // Filter machines where current user is listed in personnel
+            filteredMachines = machineList.filter((m: any) =>
+              m.personnel?.some((p: any) => p.name === currentUser.name)
+            );
+          }
+
+          setApiMachines(filteredMachines);
+
+          // Set first machine as default
+          if (filteredMachines.length > 0 && !selectedMachineId) {
+            setSelectedMachineId(filteredMachines[0].id || '');
+          }
+        }
+      } catch (err) {
+        setError('Gagal memuat daftar stasiun kerja');
+        console.error('Error fetching machines:', err);
+      } finally {
+        setMachinesLoading(false);
+      }
+    };
+
+    fetchMachines();
+  }, [currentUser]);
+
+  // Fetch tasks and logs from API
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!selectedMachineId) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Fetch tasks for this machine
+        const tasksResponse = await apiClient.getTasks(1, 100, { machine_id: selectedMachineId });
+        if (tasksResponse.success && tasksResponse.data) {
+          const taskList = Array.isArray(tasksResponse.data) ? tasksResponse.data : (tasksResponse.data.data || []);
+          setApiTasks(taskList);
+        }
+
+        // Fetch production logs for this machine with shift filter
+        const logsResponse = await apiClient.getProductionLogsByMachine(selectedMachineId, 1, 50, { shift: selectedShift });
+        if (logsResponse.success && logsResponse.data) {
+          const logList = logsResponse.data.data || (Array.isArray(logsResponse.data) ? logsResponse.data : []);
+          setApiLogs(logList);
+        }
+      } catch (err) {
+        setError('Gagal memuat data');
+        console.error('Error fetching machine data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [selectedMachineId, selectedShift]);
 
   const machine = machines.find(m => m.id === selectedMachineId);
-  const machineTasks = tasks.filter(t => t.machineId === selectedMachineId && t.status !== 'COMPLETED');
+  const machineTasks = apiTasks.filter(t => t.status !== 'COMPLETED' && t.shift === selectedShift);
   const activeTask = machineTasks.find(t => t.status === 'IN_PROGRESS' || t.status === 'DOWNTIME');
   const pendingTasks = machineTasks.filter(t => t.status !== 'IN_PROGRESS' && t.status !== 'DOWNTIME');
 
   const shiftSummary = useMemo(() => {
-    return logs.filter(l => 
-        l.shift === selectedShift && 
-        l.machineId === selectedMachineId && 
-        new Date(l.timestamp).toDateString() === new Date().toDateString()
-      ).reduce((acc, curr) => ({ good: acc.good + curr.goodQty, defect: acc.defect + curr.defectQty }), { good: 0, defect: 0 });
-  }, [logs, selectedShift, selectedMachineId]);
+    return apiLogs.filter(l =>
+        l.shift === selectedShift &&
+        new Date(l.logged_at).toDateString() === new Date().toDateString()
+      ).reduce((acc, curr) => ({ good: acc.good + curr.good_qty, defect: acc.defect + curr.defect_qty }), { good: 0, defect: 0 });
+  }, [apiLogs, selectedShift]);
 
   const recentLogs = useMemo(() => {
-    return logs.filter(l => l.machineId === selectedMachineId).slice(0, 10);
-  }, [logs, selectedMachineId]);
+    return apiLogs.slice(0, 10);
+  }, [apiLogs]);
 
-  const submitReport = () => {
-    if (reportModal) {
-      reportProduction(reportModal.id, qtyGood, qtyDefect, selectedShift, currentUser?.name || 'Unknown');
-      setReportModal(null);
-      setQtyGood(0);
-      setQtyDefect(0);
+  const handleTaskStatusChange = async (taskId: string | number, newStatus: string) => {
+    setIsSaving(true);
+    try {
+      const response = await apiClient.updateTaskStatus(taskId, newStatus);
+      if (response.success && response.data) {
+        setApiTasks(apiTasks.map(t => t.id === taskId ? response.data : t));
+        setTaskStatus(taskId.toString(), newStatus);
+      } else {
+        setError(response.message || 'Gagal mengubah status tugas');
+      }
+    } catch (err) {
+      setError('Terjadi kesalahan saat mengubah status tugas');
+      console.error('Error updating task status:', err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  if (operatorMachines.length === 0) {
+  const handleStartDowntime = async (taskId: string | number) => {
+    setIsSaving(true);
+    try {
+      const response = await apiClient.startTaskDowntime(taskId);
+      if (response.success && response.data) {
+        setApiTasks(apiTasks.map(t => t.id === taskId ? response.data : t));
+        startDowntime(taskId.toString());
+      } else {
+        setError(response.message || 'Gagal memulai downtime');
+      }
+    } catch (err) {
+      setError('Terjadi kesalahan saat memulai downtime');
+      console.error('Error starting downtime:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEndDowntime = async (taskId: string | number) => {
+    setIsSaving(true);
+    try {
+      const response = await apiClient.endTaskDowntime(taskId);
+      if (response.success && response.data) {
+        setApiTasks(apiTasks.map(t => t.id === taskId ? response.data : t));
+        endDowntime(taskId.toString());
+      } else {
+        setError(response.message || 'Gagal menyelesaikan downtime');
+      }
+    } catch (err) {
+      setError('Terjadi kesalahan saat menyelesaikan downtime');
+      console.error('Error ending downtime:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const submitReport = async () => {
+    if (!reportModal) return;
+    setIsSaving(true);
+    try {
+      // Create production log via API
+      const logPayload = {
+        task_id: reportModal.id!,
+        machine_id: selectedMachineId,
+        item_id: reportModal.item_id,
+        project_id: reportModal.project_id,
+        step: reportModal.step,
+        shift: selectedShift,
+        good_qty: qtyGood,
+        defect_qty: qtyDefect,
+        operator: currentUser?.name || 'Unknown',
+        logged_at: new Date().toISOString(),
+        type: 'OUTPUT'
+      };
+
+      const logResponse = await apiClient.createProductionLog(logPayload);
+      if (logResponse.success && logResponse.data) {
+        setApiLogs([logResponse.data, ...apiLogs]);
+
+        // Update task quantities via API
+        const newCompletedQty = (reportModal.completed_qty || 0) + qtyGood;
+        const newDefectQty = (reportModal.defect_qty || 0) + qtyDefect;
+
+        const updateResponse = await apiClient.updateTaskQuantities(reportModal.id!, newCompletedQty, newDefectQty);
+        if (updateResponse.success && updateResponse.data) {
+          setApiTasks(apiTasks.map(t => t.id === reportModal.id ? updateResponse.data : t));
+
+          // Update Zustand store to sync workflow progress across pages
+          reportProduction(reportModal.id, qtyGood, qtyDefect, selectedShift, currentUser?.name || 'Unknown');
+
+          // Refetch all tasks for the selected machine to ensure workflow progress is updated
+          // This ensures that if user navigates to ProjectDetail, the progress bars are accurate
+          try {
+            const refreshResponse = await apiClient.getTasks(1, 100, { machine_id: selectedMachineId });
+            if (refreshResponse.success && refreshResponse.data) {
+              const refreshedTasks = Array.isArray(refreshResponse.data) ? refreshResponse.data : (refreshResponse.data.data || []);
+              setApiTasks(refreshedTasks);
+            }
+          } catch (refreshErr) {
+            console.error('Error refreshing tasks:', refreshErr);
+          }
+        }
+
+        setReportModal(null);
+        setQtyGood(0);
+        setQtyDefect(0);
+      } else {
+        setError(logResponse.message || 'Gagal menyimpan hasil produksi');
+      }
+    } catch (err) {
+      setError('Terjadi kesalahan saat menyimpan hasil produksi');
+      console.error('Error submitting report:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (machinesLoading) {
+      return (
+          <div className="h-full flex flex-col items-center justify-center p-12 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
+              <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6 animate-pulse"><Activity size={48}/></div>
+              <h2 className="text-2xl font-black text-slate-400 uppercase tracking-tighter">Memuat Stasiun Kerja</h2>
+              <p className="text-slate-400 font-bold max-w-sm mx-auto mt-4">Sedang mengambil data mesin dari sistem...</p>
+          </div>
+      );
+  }
+
+  if (apiMachines.length === 0) {
       return (
           <div className="h-full flex flex-col items-center justify-center p-12 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
               <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-6"><AlertTriangle size={48}/></div>
@@ -59,17 +241,25 @@ export const MachineBoard: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-10 pb-20">
+      {/* ERROR DISPLAY */}
+      {error && (
+          <div className="bg-red-50 border border-red-200 rounded-[24px] p-6">
+              <p className="text-sm text-red-700 font-bold">{error}</p>
+          </div>
+      )}
+
       {/* SELECTION AREA */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 bg-white p-10 rounded-[48px] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-10 items-center">
             <div className="w-full md:w-1/2">
                 <label className="text-[10px] text-slate-400 font-black uppercase block mb-3 tracking-widest flex items-center gap-2"><ListFilter size={12}/> Pilih Stasiun Kerja</label>
-                <select 
+                <select
                     value={selectedMachineId}
-                    onChange={(e) => setSelectedMachineId(e.target.value)}
-                    className="w-full font-black text-3xl bg-slate-50 border-none p-6 rounded-[28px] outline-none shadow-inner focus:ring-4 focus:ring-blue-100 transition-all"
+                    onChange={(e) => { setSelectedMachineId(e.target.value); setError(null); }}
+                    disabled={machinesLoading}
+                    className="w-full font-black text-3xl bg-slate-50 border-none p-6 rounded-[28px] outline-none shadow-inner focus:ring-4 focus:ring-blue-100 transition-all disabled:opacity-50"
                 >
-                    {operatorMachines.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}
+                    {apiMachines.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}
                 </select>
             </div>
             <div className="w-full md:w-1/2 flex gap-4">
@@ -106,51 +296,57 @@ export const MachineBoard: React.FC = () => {
       {/* ACTIVE TASK PANEL */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         <div className="lg:col-span-2 space-y-8">
-          {activeTask ? (
+          {isLoading ? (
+            <div className="bg-white rounded-[56px] p-32 text-center border-8 border-dashed border-slate-100 flex flex-col items-center gap-6">
+                <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-4 animate-pulse"><Activity size={56}/></div>
+                <h2 className="text-3xl font-black text-slate-300 uppercase tracking-[0.3em]">Memuat Data Mesin</h2>
+                <p className="text-slate-400 font-bold max-w-sm mx-auto">Sedang mengambil data tugas dan log aktivitas...</p>
+            </div>
+          ) : activeTask ? (
             <div className={`bg-white rounded-[56px] border-8 shadow-2xl overflow-hidden transition-all duration-500 ${activeTask.status === 'DOWNTIME' ? 'border-amber-400' : 'border-blue-600'}`}>
                 <div className={`${activeTask.status === 'DOWNTIME' ? 'bg-amber-500' : 'bg-blue-600'} text-white px-12 py-8 flex justify-between items-center`}>
                     <div className="flex items-center gap-6">
                         <div className={`w-4 h-4 bg-white rounded-full ${activeTask.status === 'IN_PROGRESS' ? 'animate-ping' : ''}`} />
                         <span className="font-black tracking-[0.3em] text-xl uppercase">{activeTask.status === 'DOWNTIME' ? 'DOWNTIME / PERBAIKAN' : activeTask.step}</span>
                     </div>
-                    <div className="bg-white/20 backdrop-blur-md px-5 py-1.5 rounded-2xl text-xs font-black uppercase tracking-widest border border-white/30">{activeTask.projectName}</div>
+                    <div className="bg-white/20 backdrop-blur-md px-5 py-1.5 rounded-2xl text-xs font-black uppercase tracking-widest border border-white/30">{activeTask.project_name}</div>
                 </div>
-                
+
                 <div className="p-12 space-y-12">
                     <div className="text-center">
                         <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] mb-4">ITEM SEDANG DIPROSES</p>
-                        <h2 className="text-7xl font-black text-slate-900 leading-tight tracking-tighter">{activeTask.itemName}</h2>
+                        <h2 className="text-7xl font-black text-slate-900 leading-tight tracking-tighter">{activeTask.item_name}</h2>
                         <div className="flex justify-center items-center gap-10 mt-8 font-black text-lg">
-                            <div className="bg-slate-50 px-8 py-3 rounded-2xl border border-slate-100 text-slate-400">Target: <span className="text-slate-800">{activeTask.targetQty}</span></div>
+                            <div className="bg-slate-50 px-8 py-3 rounded-2xl border border-slate-100 text-slate-400">Target: <span className="text-slate-800">{activeTask.target_qty}</span></div>
                             <div className="w-2 h-2 rounded-full bg-slate-200" />
-                            <div className="bg-blue-50 px-8 py-3 rounded-2xl border border-blue-100 text-blue-500">Selesai: <span className="text-blue-700 font-black">{activeTask.completedQty}</span></div>
+                            <div className="bg-blue-50 px-8 py-3 rounded-2xl border border-blue-100 text-blue-500">Selesai: <span className="text-blue-700 font-black">{activeTask.completed_qty}</span></div>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {activeTask.status === 'DOWNTIME' ? (
-                            <button onClick={() => endDowntime(activeTask.id)} className="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white p-12 rounded-[40px] font-black text-3xl flex items-center justify-center gap-6 shadow-2xl shadow-emerald-200 transition-all hover:scale-[1.02]">
+                            <button onClick={() => handleEndDowntime(activeTask.id)} disabled={isSaving} className="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white p-12 rounded-[40px] font-black text-3xl flex items-center justify-center gap-6 shadow-2xl shadow-emerald-200 transition-all hover:scale-[1.02] disabled:opacity-50">
                                 <CheckCircle2 size={56} /> SELESAIKAN DOWNTIME
                             </button>
                         ) : (
                           <>
-                            <button onClick={() => setReportModal(activeTask)} className="bg-blue-600 hover:bg-blue-700 text-white p-14 rounded-[40px] font-black text-3xl flex flex-col items-center gap-6 shadow-2xl shadow-blue-200 transition-all hover:scale-[1.02]">
+                            <button onClick={() => setReportModal(activeTask)} disabled={isSaving} className="bg-blue-600 hover:bg-blue-700 text-white p-14 rounded-[40px] font-black text-3xl flex flex-col items-center gap-6 shadow-2xl shadow-blue-200 transition-all hover:scale-[1.02] disabled:opacity-50">
                                 <Plus size={64} /> INPUT HASIL
                             </button>
                             <div className="flex flex-col gap-4">
-                                <button onClick={() => startDowntime(activeTask.id)} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white p-8 rounded-[40px] font-black text-xl flex items-center justify-center gap-4 shadow-xl shadow-amber-100 transition-all hover:scale-[1.02]">
+                                <button onClick={() => handleStartDowntime(activeTask.id)} disabled={isSaving} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white p-8 rounded-[40px] font-black text-xl flex items-center justify-center gap-4 shadow-xl shadow-amber-100 transition-all hover:scale-[1.02] disabled:opacity-50">
                                     <AlertTriangle size={32} /> DOWNTIME
                                 </button>
-                                <button onClick={() => setTaskStatus(activeTask.id, 'PAUSED')} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-500 p-8 rounded-[40px] font-black text-xl flex items-center justify-center gap-4 transition-all">
+                                <button onClick={() => handleTaskStatusChange(activeTask.id, 'PAUSED')} disabled={isSaving} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-500 p-8 rounded-[40px] font-black text-xl flex items-center justify-center gap-4 transition-all disabled:opacity-50">
                                     <Pause size={32} /> ISTIRAHAT
                                 </button>
                             </div>
                           </>
                         )}
                     </div>
-                    {activeTask.totalDowntimeMinutes > 0 && (
+                    {activeTask.total_downtime_minutes > 0 && (
                         <div className="text-center bg-red-50 p-4 rounded-3xl border border-red-100 text-red-500 font-black text-xs uppercase tracking-widest">
-                           Total Terhenti Hari Ini: {activeTask.totalDowntimeMinutes} Menit
+                           Total Terhenti Hari Ini: {activeTask.total_downtime_minutes} Menit
                         </div>
                     )}
                 </div>
@@ -174,9 +370,9 @@ export const MachineBoard: React.FC = () => {
                    <div key={log.id} className="relative pl-8 pb-6 border-l-2 border-slate-100 last:pb-0">
                       <div className="absolute left-[-9px] top-0 w-4 h-4 rounded-full bg-white border-4 border-blue-500" />
                       <div>
-                         <p className="text-[10px] font-black text-slate-400 mb-1">{new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                         <p className="text-sm font-black text-slate-800 leading-tight">Output: <span className="text-blue-600">{log.goodQty} Good</span>, <span className="text-red-500">{log.defectQty} Defect</span></p>
-                         <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase truncate">{tasks.find(t => t.id === log.taskId)?.itemName}</p>
+                         <p className="text-[10px] font-black text-slate-400 mb-1">{new Date(log.logged_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                         <p className="text-sm font-black text-slate-800 leading-tight">Output: <span className="text-blue-600">{log.good_qty} Good</span>, <span className="text-red-500">{log.defect_qty} Defect</span></p>
+                         <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase truncate">{log.item_name}</p>
                       </div>
                    </div>
                ))}
@@ -198,13 +394,13 @@ export const MachineBoard: React.FC = () => {
                       <div className="flex-1 overflow-hidden">
                           <div className="flex items-center gap-3 mb-2">
                               <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-3 py-1 rounded-xl uppercase tracking-widest">{t.step}</span>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Target: {t.targetQty}</span>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Target: {t.target_qty}</span>
                           </div>
-                          <h4 className="text-2xl font-black text-slate-800 leading-none truncate pr-4">{t.itemName}</h4>
+                          <h4 className="text-2xl font-black text-slate-800 leading-none truncate pr-4">{t.item_name}</h4>
                       </div>
-                      <button 
-                        disabled={!!activeTask}
-                        onClick={() => setTaskStatus(t.id, 'IN_PROGRESS')}
+                      <button
+                        disabled={!!activeTask || isSaving}
+                        onClick={() => handleTaskStatusChange(t.id, 'IN_PROGRESS')}
                         className="w-16 h-16 bg-slate-50 text-slate-300 rounded-[20px] group-hover:bg-blue-600 group-hover:text-white transition-all flex items-center justify-center disabled:opacity-20 shadow-inner"
                       ><Play fill="currentColor" size={24}/></button>
                   </div>
@@ -219,7 +415,7 @@ export const MachineBoard: React.FC = () => {
                   <div className="text-center space-y-4">
                       <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-[28px] flex items-center justify-center mx-auto mb-6 shadow-xl"><Plus size={40}/></div>
                       <h3 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">Konfirmasi Output</h3>
-                      <p className="text-slate-400 font-bold uppercase tracking-[0.3em] text-xs">Tahap: {reportModal.step} &bull; {reportModal.itemName}</p>
+                      <p className="text-slate-400 font-bold uppercase tracking-[0.3em] text-xs">Tahap: {reportModal.step} &bull; {reportModal.item_name}</p>
                   </div>
 
                   <div className="space-y-12">
@@ -241,9 +437,14 @@ export const MachineBoard: React.FC = () => {
                       </div>
                   </div>
 
+                  {error && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                          <p className="text-sm text-red-700">{error}</p>
+                      </div>
+                  )}
                   <div className="flex flex-col gap-4">
-                    <button onClick={submitReport} className="w-full py-7 bg-blue-600 text-white rounded-[28px] font-black text-2xl shadow-2xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95">SIMPAN HASIL PRODUKSI</button>
-                    <button onClick={() => setReportModal(null)} className="w-full py-4 text-slate-400 font-black uppercase text-[11px] tracking-widest hover:text-slate-600">Batalkan & Kembali</button>
+                    <button onClick={submitReport} disabled={isSaving} className="w-full py-7 bg-blue-600 text-white rounded-[28px] font-black text-2xl shadow-2xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">{isSaving ? 'MENYIMPAN...' : 'SIMPAN HASIL PRODUKSI'}</button>
+                    <button onClick={() => setReportModal(null)} disabled={isSaving} className="w-full py-4 text-slate-400 font-black uppercase text-[11px] tracking-widest hover:text-slate-600 disabled:opacity-50">{isSaving ? 'Tunggu...' : 'Batalkan & Kembali'}</button>
                   </div>
               </div>
           </div>

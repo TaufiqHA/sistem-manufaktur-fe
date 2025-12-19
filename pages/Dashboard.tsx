@@ -1,15 +1,41 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { 
-  Briefcase, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Activity 
+import {
+  Briefcase,
+  AlertTriangle,
+  CheckCircle2,
+  Activity,
+  Package
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { apiClient, ProjectItemData } from '../lib/api';
 
 export const Dashboard: React.FC = () => {
   const { projects, machines, tasks, materials } = useStore();
+  const [projectItems, setProjectItems] = useState<ProjectItemData[]>([]);
+  const [loadingItems, setLoadingItems] = useState(true);
+  const [itemsError, setItemsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProjectItems = async () => {
+      try {
+        setLoadingItems(true);
+        setItemsError(null);
+        const response = await apiClient.getProjectItems(1, 15);
+        if (response.success && response.data) {
+          setProjectItems(response.data.data || []);
+        } else {
+          setItemsError(response.message || 'Failed to fetch project items');
+        }
+      } catch (error) {
+        setItemsError(error instanceof Error ? error.message : 'An error occurred');
+      } finally {
+        setLoadingItems(false);
+      }
+    };
+
+    fetchProjectItems();
+  }, []);
 
   const activeProjects = projects.filter(p => p.status === 'IN_PROGRESS').length;
   const lowStock = materials.filter(m => m.currentStock < m.safetyStock).length;
@@ -69,11 +95,11 @@ export const Dashboard: React.FC = () => {
 
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">Low Stock Alerts</p>
-            <p className="text-3xl font-bold text-red-600 mt-2">{lowStock}</p>
+            <p className="text-sm font-medium text-slate-500">Project Items</p>
+            <p className="text-3xl font-bold text-slate-900 mt-2">{loadingItems ? '-' : projectItems.length}</p>
           </div>
-          <div className="p-3 bg-red-50 text-red-600 rounded-lg">
-            <AlertTriangle size={24} />
+          <div className="p-3 bg-purple-50 text-purple-600 rounded-lg">
+            <Package size={24} />
           </div>
         </div>
       </div>
@@ -119,6 +145,57 @@ export const Dashboard: React.FC = () => {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Project Items Section */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-800">Project Items</h2>
+          {loadingItems && <span className="text-xs text-slate-500">Loading...</span>}
+        </div>
+
+        {itemsError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-red-700">{itemsError}</p>
+          </div>
+        )}
+
+        {loadingItems ? (
+          <div className="text-center py-8">
+            <p className="text-slate-500">Loading project items...</p>
+          </div>
+        ) : projectItems.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-slate-500">No project items found</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Item Name</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Dimensions</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Thickness</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Quantity</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Unit</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Project ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projectItems.map((item, index) => (
+                  <tr key={item.id || index} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="py-3 px-4 text-slate-800">{item.name}</td>
+                    <td className="py-3 px-4 text-slate-600">{item.dimensions}</td>
+                    <td className="py-3 px-4 text-slate-600">{item.thickness}</td>
+                    <td className="py-3 px-4 text-slate-600">{item.quantity}</td>
+                    <td className="py-3 px-4 text-slate-600">{item.unit}</td>
+                    <td className="py-3 px-4 text-slate-600">{item.project_id}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

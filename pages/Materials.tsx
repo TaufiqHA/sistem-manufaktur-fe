@@ -1,49 +1,118 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { Plus, Edit3, Trash2, X, Search, ChevronLeft, ChevronRight, Package, Coins, AlertCircle } from 'lucide-react';
 import { Material } from '../types';
+import { apiClient, MaterialData } from '../lib/api';
 
 const CATEGORIES = ['RAW', 'FINISHING', 'HARDWARE'];
 const UNITS = ['PCS', 'BOX', 'LEMBAR', 'KG', 'METER', 'ROLL', 'SET'];
 
 export const Materials: React.FC = () => {
-  const { materials, addMaterial, updateMaterial, adjustStock, can } = useStore();
+  const { can } = useStore();
+  const [materials, setMaterials] = useState<MaterialData[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [adjustModal, setAdjustModal] = useState<{id: string, name: string} | null>(null);
+  const [totalPages, setTotalPages] = useState(1);
+  const [adjustModal, setAdjustModal] = useState<{id: string | number, name: string} | null>(null);
   const [adjustValue, setAdjustValue] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   if (!can('view', 'MATERIALS')) return <div className="p-8 text-center text-slate-500 font-bold">Akses Ditolak.</div>;
 
-  const initialFormState: Partial<Material> = {
-    code: '', name: '', unit: 'PCS', currentStock: 0, safetyStock: 0, pricePerUnit: 0, category: 'RAW'
+  const initialFormState: Partial<MaterialData> = {
+    code: '', name: '', unit: 'PCS', current_stock: 0, safety_stock: 0, price_per_unit: 0, category: 'RAW'
   };
-  const [formData, setFormData] = useState<Partial<Material>>(initialFormState);
+  const [formData, setFormData] = useState<Partial<MaterialData>>(initialFormState);
 
-  const filteredMaterials = materials.filter(m => 
-    m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.code.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  
-  const totalPages = Math.ceil(filteredMaterials.length / itemsPerPage);
-  const paginatedMaterials = filteredMaterials.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  useEffect(() => {
+    fetchMaterials(1);
+  }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const fetchMaterials = async (page: number = 1, search?: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await apiClient.getMaterials(page, itemsPerPage, search || searchTerm);
+      if (response.success && response.data?.data) {
+        setMaterials(response.data.data);
+        if (response.data.last_page) {
+          setTotalPages(response.data.last_page);
+        }
+      } else {
+        setError(response.message || 'Gagal memuat data material');
+      }
+    } catch (err) {
+      setError('Terjadi kesalahan saat memuat data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingId) { updateMaterial({ ...formData, id: editingId } as Material); } 
-    else { addMaterial({ ...formData, id: `mat-${Date.now()}` } as Material); }
-    setIsModalOpen(false);
+    setIsLoading(true);
+    try {
+      const payload = {
+        code: formData.code!,
+        name: formData.name!,
+        unit: formData.unit!,
+        current_stock: formData.current_stock!,
+        safety_stock: formData.safety_stock!,
+        price_per_unit: formData.price_per_unit!,
+        category: formData.category! as any,
+      };
+
+      if (editingId) {
+        await apiClient.updateMaterial(editingId, payload);
+      } else {
+        await apiClient.createMaterial(payload);
+      }
+
+      await fetchMaterials(currentPage);
+      setIsModalOpen(false);
+      setEditingId(null);
+      setFormData(initialFormState);
+    } catch (err) {
+      setError('Gagal menyimpan material');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleAdjust = (e: React.FormEvent) => {
+  const handleDelete = async (id: string | number) => {
+    if (confirm('Yakin ingin menghapus material ini?')) {
+      setIsLoading(true);
+      try {
+        await apiClient.deleteMaterial(id);
+        await fetchMaterials(currentPage);
+      } catch (err) {
+        setError('Gagal menghapus material');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  const handleAdjust = async (e: React.FormEvent) => {
     e.preventDefault();
     if (adjustModal) {
-      adjustStock(adjustModal.id, adjustValue);
-      setAdjustModal(null);
-      setAdjustValue(0);
+      setIsLoading(true);
+      try {
+        const operation = adjustValue >= 0 ? 'add' : 'reduce';
+        await apiClient.updateMaterialStock(adjustModal.id, Math.abs(adjustValue), operation);
+        await fetchMaterials(currentPage);
+        setAdjustModal(null);
+        setAdjustValue(0);
+      } catch (err) {
+        setError('Gagal mengubah stok');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -61,8 +130,9 @@ export const Materials: React.FC = () => {
         <div className="p-8 border-b bg-slate-50 flex gap-6">
            <div className="relative flex-1 max-w-md">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input type="text" placeholder="Cari material berdasarkan SKU atau Nama..." className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+              <input type="text" placeholder="Cari material berdasarkan SKU atau Nama..." className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); fetchMaterials(1, e.target.value); }} />
            </div>
+           {error && <p className="text-red-600 font-bold text-sm">{error}</p>}
         </div>
 
         <table className="w-full text-sm text-left">
@@ -77,37 +147,44 @@ export const Materials: React.FC = () => {
               </tr>
            </thead>
            <tbody className="divide-y divide-slate-100 font-bold">
-              {paginatedMaterials.map(mat => (
-                 <tr key={mat.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-8 py-5">
-                       <p className="text-[10px] text-blue-600 font-black mb-1">{mat.code}</p>
-                       <p className="font-black text-slate-800 text-base">{mat.name}</p>
-                    </td>
-                    <td className="px-8 py-5">
-                       <span className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest border ${mat.category === 'RAW' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-slate-50 text-slate-600 border-slate-100'}`}>{mat.category}</span>
-                    </td>
-                    <td className="px-8 py-5 text-center">
-                       <span className={`text-xl font-black ${mat.currentStock < mat.safetyStock ? 'text-red-600' : 'text-slate-800'}`}>{mat.currentStock.toFixed(2)}</span>
-                       <span className="text-[9px] text-slate-400 ml-2 uppercase tracking-tighter">{mat.unit}</span>
-                    </td>
-                    <td className="px-8 py-5 text-center text-slate-500 font-bold">{mat.safetyStock} <span className="text-[9px] uppercase tracking-tighter">{mat.unit}</span></td>
-                    <td className="px-8 py-5 text-right font-black text-slate-900">Rp {mat.pricePerUnit.toLocaleString()}</td>
-                    <td className="px-8 py-5 text-right">
-                       <div className="flex justify-end gap-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all">
-                          <button onClick={() => setAdjustModal({id: mat.id, name: mat.name})} className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-lg" title="Adjustment Stock"><Package size={18}/></button>
-                          <button onClick={() => { setEditingId(mat.id); setFormData(mat); setIsModalOpen(true); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit3 size={18}/></button>
-                       </div>
-                    </td>
-                 </tr>
-              ))}
+              {isLoading ? (
+                 <tr><td colSpan={6} className="px-8 py-12 text-center text-slate-500">Memuat data...</td></tr>
+              ) : materials.length === 0 ? (
+                 <tr><td colSpan={6} className="px-8 py-12 text-center text-slate-500">Tidak ada data material</td></tr>
+              ) : (
+                 materials.map(mat => (
+                    <tr key={mat.id} className="hover:bg-slate-50/50 transition-colors group">
+                       <td className="px-8 py-5">
+                          <p className="text-[10px] text-blue-600 font-black mb-1">{mat.code}</p>
+                          <p className="font-black text-slate-800 text-base">{mat.name}</p>
+                       </td>
+                       <td className="px-8 py-5">
+                          <span className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest border ${mat.category === 'RAW' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-slate-50 text-slate-600 border-slate-100'}`}>{mat.category}</span>
+                       </td>
+                       <td className="px-8 py-5 text-center">
+                          <span className={`text-xl font-black ${mat.current_stock < mat.safety_stock ? 'text-red-600' : 'text-slate-800'}`}>{mat.current_stock.toFixed(2)}</span>
+                          <span className="text-[9px] text-slate-400 ml-2 uppercase tracking-tighter">{mat.unit}</span>
+                       </td>
+                       <td className="px-8 py-5 text-center text-slate-500 font-bold">{mat.safety_stock} <span className="text-[9px] uppercase tracking-tighter">{mat.unit}</span></td>
+                       <td className="px-8 py-5 text-right font-black text-slate-900">Rp {Number(mat.price_per_unit).toLocaleString()}</td>
+                       <td className="px-8 py-5 text-right">
+                          <div className="flex justify-end gap-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all">
+                             <button onClick={() => setAdjustModal({id: mat.id!, name: mat.name})} className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-lg" title="Adjustment Stock"><Package size={18}/></button>
+                             <button onClick={() => { setEditingId(mat.id!); setFormData(mat); setIsModalOpen(true); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit3 size={18}/></button>
+                             <button onClick={() => handleDelete(mat.id!)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
+                          </div>
+                       </td>
+                    </tr>
+                 ))
+              )}
            </tbody>
         </table>
 
         <div className="p-8 bg-slate-50 border-t flex justify-between items-center text-xs font-black text-slate-400 uppercase tracking-widest">
            <span>Halaman {currentPage} dari {totalPages || 1}</span>
            <div className="flex items-center gap-4">
-              <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="p-3 bg-white border rounded-2xl hover:shadow-lg disabled:opacity-20 transition-all"><ChevronLeft size={20}/></button>
-              <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)} className="p-3 bg-white border rounded-2xl hover:shadow-lg disabled:opacity-20 transition-all"><ChevronRight size={20}/></button>
+              <button disabled={currentPage === 1} onClick={() => { const newPage = currentPage - 1; setCurrentPage(newPage); fetchMaterials(newPage); }} className="p-3 bg-white border rounded-2xl hover:shadow-lg disabled:opacity-20 transition-all"><ChevronLeft size={20}/></button>
+              <button disabled={currentPage >= totalPages} onClick={() => { const newPage = currentPage + 1; setCurrentPage(newPage); fetchMaterials(newPage); }} className="p-3 bg-white border rounded-2xl hover:shadow-lg disabled:opacity-20 transition-all"><ChevronRight size={20}/></button>
            </div>
         </div>
       </div>
@@ -142,11 +219,20 @@ export const Materials: React.FC = () => {
                        </select>
                     </div>
                     <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Stok Saat Ini</label>
+                       <input type="number" required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none" value={formData.current_stock} onChange={e => setFormData({...formData, current_stock: Number(e.target.value)})} />
+                    </div>
+                    <div className="space-y-2">
                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Safety Stock (Limit)</label>
-                       <input type="number" required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none" value={formData.safetyStock} onChange={e => setFormData({...formData, safetyStock: Number(e.target.value)})} />
+                       <input type="number" required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none" value={formData.safety_stock} onChange={e => setFormData({...formData, safety_stock: Number(e.target.value)})} />
+                    </div>
+                    <div className="col-span-2 space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Harga Per Satuan</label>
+                       <input type="number" step="0.01" required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none" value={formData.price_per_unit} onChange={e => setFormData({...formData, price_per_unit: Number(e.target.value)})} />
                     </div>
                  </div>
-                 <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-[24px] font-black text-lg uppercase shadow-2xl hover:bg-blue-700 transition-all">SIMPAN MASTER MATERIAL</button>
+                 <button type="submit" disabled={isLoading} className="w-full py-6 bg-blue-600 text-white rounded-[24px] font-black text-lg uppercase shadow-2xl hover:bg-blue-700 transition-all disabled:opacity-50">{isLoading ? 'MENYIMPAN...' : 'SIMPAN MASTER MATERIAL'}</button>
+                 {error && <p className="text-red-600 text-center font-bold">{error}</p>}
               </form>
            </div>
         </div>
@@ -167,8 +253,9 @@ export const Materials: React.FC = () => {
                   <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex items-center gap-3 text-amber-700 text-[10px] font-bold uppercase text-left">
                      <AlertCircle size={24}/> Perubahan ini akan langsung mempengaruhi stok gudang saat ini.
                   </div>
+                  {error && <p className="text-red-600 text-center font-bold text-sm">{error}</p>}
                   <div className="flex flex-col gap-3">
-                     <button type="submit" className="w-full py-6 bg-emerald-600 text-white rounded-[24px] font-black text-lg shadow-2xl hover:bg-emerald-700 transition-all">EKSEKUSI ADJUSTMENT</button>
+                     <button type="submit" disabled={isLoading} className="w-full py-6 bg-emerald-600 text-white rounded-[24px] font-black text-lg shadow-2xl hover:bg-emerald-700 transition-all disabled:opacity-50">{isLoading ? 'MEMPROSES...' : 'EKSEKUSI ADJUSTMENT'}</button>
                      <button type="button" onClick={() => setAdjustModal(null)} className="text-slate-400 font-black uppercase text-[10px] tracking-widest py-2">Batalkan</button>
                   </div>
                </form>
