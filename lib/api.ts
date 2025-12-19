@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+const API_BASE_URL = "https://api.manufactur.id/api";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -1213,7 +1213,9 @@ class ApiClient {
     return this.request<any>(`/backups/${id}`, "GET", undefined, true);
   }
 
-  async createBackup(type: "full" | "incremental" | "selective" = "full"): Promise<ApiResponse<any>> {
+  async createBackup(
+    type: "full" | "incremental" | "selective" = "full"
+  ): Promise<ApiResponse<any>> {
     return this.request<any>("/backups", "POST", { type }, true);
   }
 
