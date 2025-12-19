@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://api.manufactur.id/api";
+const API_BASE_URL = "http://localhost:8000/api";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -60,6 +60,7 @@ interface UserData {
   email_verified_at?: string | null;
   created_at?: string;
   updated_at?: string;
+  permissions?: Record<string, Record<string, boolean>>;
 }
 
 interface UsersListResponse {
@@ -84,13 +85,18 @@ interface UserCreateRequest {
   name: string;
   email: string;
   password?: string;
+  password_confirmation?: string;
   role?: "ADMIN" | "OPERATOR" | "MANAGER";
+  permissions?: Record<string, Record<string, boolean>>;
 }
 
 interface UserUpdateRequest {
   name?: string;
   email?: string;
   role?: "ADMIN" | "OPERATOR" | "MANAGER";
+  password?: string;
+  password_confirmation?: string;
+  permissions?: Record<string, Record<string, boolean>>;
 }
 
 interface ProjectData {
@@ -416,6 +422,52 @@ interface TaskQuantitiesRequest {
 
 interface DeleteResponse {
   message: string;
+}
+
+interface BackupData {
+  id: number;
+  filename: string;
+  path: string;
+  disk: string;
+  size: number | null;
+  status: "pending" | "processing" | "completed" | "failed";
+  type: "full" | "incremental" | "selective";
+  details?: {
+    tables?: string[];
+    excluded_tables?: string[];
+    compression?: string;
+    encrypted?: boolean;
+  };
+  completed_at: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface BackupsListResponse {
+  data: BackupData[];
+  pagination?: {
+    total: number;
+    per_page: number;
+    current_page: number;
+    last_page: number;
+    first_page_url?: string;
+    last_page_url?: string;
+    next_page_url?: string | null;
+    prev_page_url?: string | null;
+  };
+}
+
+interface BackupStatsResponse {
+  total_backups: number;
+  total_size_bytes: number;
+  total_size_formatted: string;
+  latest_backup?: BackupData;
+  status_counts: {
+    completed: number;
+    processing: number;
+    failed: number;
+  };
 }
 
 class ApiClient {
@@ -1152,6 +1204,54 @@ class ApiClient {
     );
   }
 
+  // Backup API Methods
+  async getBackups(): Promise<ApiResponse<any>> {
+    return this.request<any>("/backups", "GET", undefined, true);
+  }
+
+  async getBackup(id: string | number): Promise<ApiResponse<any>> {
+    return this.request<any>(`/backups/${id}`, "GET", undefined, true);
+  }
+
+  async createBackup(type: "full" | "incremental" | "selective" = "full"): Promise<ApiResponse<any>> {
+    return this.request<any>("/backups", "POST", { type }, true);
+  }
+
+  async updateBackup(
+    id: string | number,
+    data: {
+      status?: "pending" | "processing" | "completed" | "failed";
+      size?: number;
+      completed_at?: string;
+    }
+  ): Promise<ApiResponse<any>> {
+    return this.request<any>(`/backups/${id}`, "PATCH", data, true);
+  }
+
+  async deleteBackup(id: string | number): Promise<ApiResponse<any>> {
+    return this.request<any>(`/backups/${id}`, "DELETE", {}, true);
+  }
+
+  async downloadBackup(id: string | number): Promise<void> {
+    const token = this.getToken();
+    if (!token) {
+      throw new Error("No authentication token found");
+    }
+
+    const url = `${this.baseUrl}/backups/${id}/download`;
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("Authorization", `Bearer ${token}`);
+    link.download = "";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  async getBackupStats(): Promise<ApiResponse<any>> {
+    return this.request<any>("/backups/stats", "GET", undefined, true);
+  }
+
   setToken(token: string): void {
     localStorage.setItem("auth_token", token);
   }
@@ -1208,4 +1308,7 @@ export type {
   TaskCreateRequest,
   TaskStatusRequest,
   TaskQuantitiesRequest,
+  BackupData,
+  BackupsListResponse,
+  BackupStatsResponse,
 };

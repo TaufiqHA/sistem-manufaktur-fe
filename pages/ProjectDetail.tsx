@@ -460,21 +460,25 @@ export const ProjectDetail: React.FC = () => {
   };
 
   const startWorkflowConfig = (item: any) => {
-    setWorkflowConfig(item.workflow?.length > 0 ? item.workflow : ALL_STEPS.map((s, idx) => ({ step: s, sequence: idx + 1, allocations: [] })));
+    setWorkflowConfig(item.workflow?.length > 0 ? item.workflow : ALL_STEPS.map((s, idx) => ({ step: s, sequence: idx + 1, machineId: '' })));
     setIsConfigModalOpen(item.id);
   };
 
   const handleSaveWorkflow = async () => {
     if (!isConfigModalOpen) return;
 
+    // Validate that all steps have a machine assigned
+    if (workflowConfig.some(s => !s.machineId)) {
+      setError('Semua tahapan proses harus memiliki mesin yang ditugaskan');
+      return;
+    }
+
     setIsSaving(true);
     try {
-      const filteredWorkflow = workflowConfig.filter(s => s.allocations.length > 0);
-
       // Call API to update the project item with workflow configuration
       const response = await apiClient.updateProjectItem(isConfigModalOpen, {
         is_workflow_locked: true,
-        workflow: filteredWorkflow
+        workflow: workflowConfig
       });
 
       if (response.success && response.data) {
@@ -482,9 +486,9 @@ export const ProjectDetail: React.FC = () => {
         setProjectItems(projectItems.map(i => i.id === isConfigModalOpen ? response.data : i));
 
         // Create tasks from the workflow
-        validateWorkflow(isConfigModalOpen.toString(), filteredWorkflow);
+        validateWorkflow(isConfigModalOpen.toString(), workflowConfig);
 
-        // Auto-create tasks via API for each allocation in workflow
+        // Auto-create tasks via API for each workflow step
         const item = projectItems.find(i => i.id === isConfigModalOpen);
         if (item && project) {
           // Calculate days until deadline
@@ -494,67 +498,65 @@ export const ProjectDetail: React.FC = () => {
           deadline.setHours(0, 0, 0, 0);
           const daysUntilDeadline = Math.max(1, Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
 
-          for (const workflowStep of filteredWorkflow) {
-            for (const allocation of workflowStep.allocations) {
-              try {
-                // Get machine details to determine shifts
-                const machineResponse = await apiClient.getMachine(allocation.machineId);
-                let shiftsOnMachine: string[] = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3']; // Default to 3 shifts
+          for (const workflowStep of workflowConfig) {
+            try {
+              // Get machine details to determine shifts
+              const machineResponse = await apiClient.getMachine(workflowStep.machineId);
+              let shiftsOnMachine: string[] = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3']; // Default to 3 shifts
 
-                if (machineResponse.success && machineResponse.data) {
-                  const machine = machineResponse.data;
-                  // Extract unique shifts from machine personnel
-                  const uniqueShifts = new Set<string>();
-                  if (Array.isArray(machine.personnel)) {
-                    machine.personnel.forEach((p: any) => {
-                      if (p.shift) {
-                        uniqueShifts.add(p.shift);
-                      }
-                    });
-                  }
-                  // If shifts found in personnel, use them; otherwise use default
-                  if (uniqueShifts.size > 0) {
-                    shiftsOnMachine = Array.from(uniqueShifts).sort();
-                  }
-                }
-
-                // Calculate adjusted target quantity per shift per day
-                const totalDivisor = shiftsOnMachine.length * daysUntilDeadline;
-                const adjustedTargetQty = Math.ceil(allocation.targetQty / totalDivisor);
-
-                // Create tasks for each day from today until deadline
-                for (let dayOffset = 0; dayOffset < daysUntilDeadline; dayOffset++) {
-                  const taskDate = new Date(today);
-                  taskDate.setDate(taskDate.getDate() + dayOffset);
-                  const isAccessible = dayOffset === 0; // Only today's tasks are accessible
-
-                  // Create one task for each shift on the machine for this specific day
-                  for (const shift of shiftsOnMachine) {
-                    const taskPayload = {
-                      project_id: project.id!,
-                      project_name: project.name,
-                      item_id: item.id!,
-                      item_name: item.name,
-                      step: workflowStep.step,
-                      machine_id: allocation.machineId,
-                      target_qty: adjustedTargetQty,
-                      completed_qty: 0,
-                      defect_qty: 0,
-                      shift: shift,
-                      scheduled_date: taskDate.toISOString().split('T')[0],
-                      is_accessible: isAccessible,
-                      status: isAccessible ? 'PENDING' : 'LOCKED'
-                    };
-
-                    const taskResponse = await apiClient.createTask(taskPayload);
-                    if (taskResponse.success && taskResponse.data) {
-                      setApiTasks(prev => [...prev, taskResponse.data]);
+              if (machineResponse.success && machineResponse.data) {
+                const machine = machineResponse.data;
+                // Extract unique shifts from machine personnel
+                const uniqueShifts = new Set<string>();
+                if (Array.isArray(machine.personnel)) {
+                  machine.personnel.forEach((p: any) => {
+                    if (p.shift) {
+                      uniqueShifts.add(p.shift);
                     }
+                  });
+                }
+                // If shifts found in personnel, use them; otherwise use default
+                if (uniqueShifts.size > 0) {
+                  shiftsOnMachine = Array.from(uniqueShifts).sort();
+                }
+              }
+
+              // Calculate adjusted target quantity per shift per day
+              const totalDivisor = shiftsOnMachine.length * daysUntilDeadline;
+              const adjustedTargetQty = Math.ceil(item.quantity / totalDivisor);
+
+              // Create tasks for each day from today until deadline
+              for (let dayOffset = 0; dayOffset < daysUntilDeadline; dayOffset++) {
+                const taskDate = new Date(today);
+                taskDate.setDate(taskDate.getDate() + dayOffset);
+                const isAccessible = dayOffset === 0; // Only today's tasks are accessible
+
+                // Create one task for each shift on the machine for this specific day
+                for (const shift of shiftsOnMachine) {
+                  const taskPayload = {
+                    project_id: project.id!,
+                    project_name: project.name,
+                    item_id: item.id!,
+                    item_name: item.name,
+                    step: workflowStep.step,
+                    machine_id: workflowStep.machineId,
+                    target_qty: adjustedTargetQty,
+                    completed_qty: 0,
+                    defect_qty: 0,
+                    shift: shift,
+                    scheduled_date: taskDate.toISOString().split('T')[0],
+                    is_accessible: isAccessible,
+                    status: isAccessible ? 'PENDING' : 'LOCKED'
+                  };
+
+                  const taskResponse = await apiClient.createTask(taskPayload);
+                  if (taskResponse.success && taskResponse.data) {
+                    setApiTasks(prev => [...prev, taskResponse.data]);
                   }
                 }
-              } catch (taskErr) {
-                console.error('Error creating task for allocation:', taskErr);
               }
+            } catch (taskErr) {
+              console.error('Error creating task for step:', taskErr);
             }
           }
         }
@@ -1089,67 +1091,80 @@ export const ProjectDetail: React.FC = () => {
                   <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Konfigurasi Alur Produksi & Mesin</h2>
                   <button onClick={() => setIsConfigModalOpen(null)} className="p-4 hover:bg-slate-200 rounded-full transition-all"><X size={28}/></button>
                </div>
-               <div className="flex-1 overflow-y-auto p-12 space-y-12 bg-white">
+               <div className="flex-1 overflow-y-auto p-12 space-y-8 bg-white">
+                  <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6">
+                    <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest">ℹ️ Alur Proses Manufaktur</p>
+                    <p className="text-sm font-black text-slate-700 mt-2">Semua 8 tahapan adalah wajib. Pilih mesin mana yang akan menangani setiap tahapan.</p>
+                  </div>
+
                   {workflowConfig.map((s, sIdx) => {
-                    const isSelected = s.allocations.length > 0;
                     const stepTasks = projectFilteredTasks.filter(t => t.step === s.step);
                     const stepTotal = stepTasks.reduce((acc, t) => acc + (t.target_qty || t.targetQty || 0), 0);
                     const stepCompleted = stepTasks.reduce((acc, t) => acc + (t.completed_qty || t.completedQty || 0), 0);
                     const stepProgress = stepTotal > 0 ? Math.round((stepCompleted / stepTotal) * 100) : 0;
+                    const assignedMachine = apiMachines.find(m => m.id === s.machineId);
 
                     return (
-                      <div key={s.step} className={`p-10 rounded-[40px] border-4 transition-all duration-300 ${isSelected ? 'border-blue-100 bg-blue-50/10' : 'border-slate-50 opacity-30 hover:opacity-100'}`}>
-                        <div className="flex items-center justify-between mb-8">
+                      <div key={s.step} className="p-8 rounded-[32px] border-2 border-slate-100 bg-white space-y-6">
+                        <div className="flex items-center justify-between">
                            <div className="flex items-center gap-6 flex-1">
-                             <input type="checkbox" checked={isSelected} onChange={() => setWorkflowConfig(prev => prev.map(f => f.step === s.step ? {...f, allocations: f.allocations.length > 0 ? [] : [{id: `a-${Date.now()}`, machineId: '', targetQty: projectItems.find(i => i.id?.toString() === isConfigModalOpen)?.quantity || 0}]} : f))} className="w-8 h-8 rounded-xl text-blue-600 focus:ring-blue-500" />
-                             <div className="flex items-center gap-4">
-                               <span className="text-3xl font-black text-slate-800 uppercase tracking-tighter">{sIdx + 1}. {s.step}</span>
-                               {isSelected && (
-                                 <div className="flex items-center gap-3 ml-4 pl-4 border-l border-slate-200">
-                                   <div className="text-right">
-                                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Progress Tahap Ini</p>
-                                     <p className="text-xl font-black text-blue-600">{stepProgress}%</p>
-                                   </div>
-                                   <div className="w-20 h-2 bg-slate-200 rounded-full overflow-hidden">
-                                     <div className="h-full bg-blue-600 transition-all" style={{width: `${stepProgress}%`}} />
-                                   </div>
-                                   <p className="text-[9px] font-black text-slate-500 whitespace-nowrap">{stepCompleted}/{stepTotal}</p>
-                                 </div>
-                               )}
+                             <div className="w-16 h-16 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-2xl flex-shrink-0">
+                               {sIdx + 1}
+                             </div>
+                             <div>
+                               <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{s.step}</h3>
+                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tahapan Produksi {sIdx + 1} dari {ALL_STEPS.length}</p>
                              </div>
                            </div>
-                           {isSelected && <button onClick={() => setWorkflowConfig(prev => prev.map(f => f.step === s.step ? {...f, allocations: [...f.allocations, {id: `a-${Date.now()}`, machineId: '', targetQty: 0}]} : f))} className="bg-slate-900 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl">+ Tambah Mesin Alokasi</button>}
-                        </div>
-                        {isSelected && (
-                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                             {s.allocations.map(a => (
-                               <div key={a.id} className="bg-white p-8 rounded-[32px] border-2 border-slate-100 flex gap-6 items-center shadow-sm">
-                                  <div className="flex-1 space-y-2">
-                                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pilih Mesin Operasional</label>
-                                     <select disabled={machinesLoading} className="w-full p-4 bg-slate-50 rounded-2xl font-black outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-50" value={a.machineId} onChange={e => setWorkflowConfig(prev => prev.map(f => f.step === s.step ? {...f, allocations: f.allocations.map(x => x.id === a.id ? {...x, machineId: e.target.value} : x)} : f))}>
-                                        <option value="">{machinesLoading ? 'Memuat mesin...' : 'Cari Mesin...'}</option>
-                                        {apiMachines.filter(m => m.type === s.step).map(m => <option key={m.id} value={m.id}>{m.name} ({m.status})</option>)}
-                                     </select>
-                                  </div>
-                                  <div className="w-32 space-y-2">
-                                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Target Qty</label>
-                                     <input type="number" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-center" value={a.targetQty} onChange={e => setWorkflowConfig(prev => prev.map(f => f.step === s.step ? {...f, allocations: f.allocations.map(x => x.id === a.id ? {...x, targetQty: Number(e.target.value)} : x)} : f))} />
-                                  </div>
-                                  {s.allocations.length > 1 && <button onClick={() => setWorkflowConfig(prev => prev.map(f => f.step === s.step ? {...f, allocations: f.allocations.filter(x => x.id !== a.id)} : f))} className="text-red-400 p-2 hover:bg-red-50 rounded-xl transition-all"><Trash2/></button>}
+                           {stepTasks.length > 0 && (
+                             <div className="text-right">
+                               <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">Progress</p>
+                               <div className="flex items-center gap-3">
+                                 <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                   <div className="h-full bg-blue-600 transition-all" style={{width: `${stepProgress}%`}} />
+                                 </div>
+                                 <span className="text-sm font-black text-slate-800 min-w-12">{stepProgress}%</span>
                                </div>
-                             ))}
-                           </div>
-                        )}
-                        {isSelected && stepTasks.length > 0 && (
-                           <div className="bg-blue-50 border border-blue-100 p-6 rounded-2xl space-y-4 mt-8">
-                             <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest">📊 Ringkasan Progress Tahap {s.step}</p>
+                             </div>
+                           )}
+                        </div>
+
+                        <div className="space-y-3">
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pilih Mesin Pelaksana</label>
+                           <select
+                             disabled={machinesLoading}
+                             className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 disabled:opacity-50 text-slate-900"
+                             value={s.machineId}
+                             onChange={e => setWorkflowConfig(prev => prev.map(f => f.step === s.step ? {...f, machineId: e.target.value} : f))}
+                           >
+                              <option value="">{machinesLoading ? 'Memuat mesin...' : '- Pilih Mesin -'}</option>
+                              {apiMachines
+                                .filter(m => m.type === s.step)
+                                .map(m => (
+                                  <option key={m.id} value={m.id}>
+                                    {m.name} ({m.status})
+                                  </option>
+                                ))
+                              }
+                           </select>
+                           {assignedMachine && (
+                             <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 mt-3">
+                               <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">✓ Mesin Dipilih</p>
+                               <p className="text-sm font-black text-emerald-700 mt-1">{assignedMachine.name}</p>
+                             </div>
+                           )}
+                        </div>
+
+                        {stepTasks.length > 0 && (
+                           <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl space-y-4 mt-4">
+                             <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">📊 Status Progress Tahap</p>
                              <div className="grid grid-cols-4 gap-4">
                                <div>
-                                 <p className="text-[8px] font-bold text-slate-500 uppercase">Total Tugas</p>
+                                 <p className="text-[8px] font-bold text-slate-500 uppercase">Tugas</p>
                                  <p className="text-lg font-black text-slate-900">{stepTasks.length}</p>
                                </div>
                                <div>
-                                 <p className="text-[8px] font-bold text-slate-500 uppercase">Target Total</p>
+                                 <p className="text-[8px] font-bold text-slate-500 uppercase">Target</p>
                                  <p className="text-lg font-black text-slate-900">{stepTotal}</p>
                                </div>
                                <div>
@@ -1167,6 +1182,7 @@ export const ProjectDetail: React.FC = () => {
                     )
                   })}
                </div>
+
                <div className="p-10 border-t bg-slate-50 space-y-8">
                   <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 space-y-4">
                     <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest">📅 Distribusi Tugas Per Hari</p>
@@ -1188,12 +1204,8 @@ export const ProjectDetail: React.FC = () => {
                       ⚠️ Hanya tugas untuk HARI INI yang bisa diakses. Tugas untuk hari depan akan otomatis tersedia sesuai jadwalnya.
                     </div>
                   </div>
-                  <div className="flex justify-end gap-10 items-center">
-                    <div className="text-right">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Alokasi Step 1</p>
-                      <p className="text-4xl font-black text-blue-600 tracking-tighter">{workflowConfig.find(w => w.step === 'POTONG')?.allocations.reduce((acc, c) => acc + c.targetQty, 0) || 0} PCS</p>
-                    </div>
-                    <button onClick={handleSaveWorkflow} disabled={isSaving || workflowConfig.every(s => s.allocations.length === 0)} title={workflowConfig.every(s => s.allocations.length === 0) ? 'Silakan pilih minimal satu tahap produksi' : ''} className="bg-blue-600 text-white px-16 py-6 rounded-[32px] font-black text-lg shadow-2xl uppercase tracking-widest flex items-center gap-4 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"><Save size={24}/> {isSaving ? 'MENYIMPAN...' : 'VALIDASI & SIMPAN ALUR'}</button>
+                  <div className="flex justify-end items-center">
+                    <button onClick={handleSaveWorkflow} disabled={isSaving || workflowConfig.some(s => !s.machineId)} title={workflowConfig.some(s => !s.machineId) ? 'Silakan pilih mesin untuk semua tahapan' : ''} className="bg-blue-600 text-white px-16 py-6 rounded-[32px] font-black text-lg shadow-2xl uppercase tracking-widest flex items-center gap-4 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"><Save size={24}/> {isSaving ? 'MENYIMPAN...' : 'VALIDASI & SIMPAN ALUR'}</button>
                   </div>
                </div>
             </div>

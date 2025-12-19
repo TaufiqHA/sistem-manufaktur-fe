@@ -4,11 +4,21 @@ This document outlines the API endpoints for user management in the application.
 
 ## Authentication
 
-Most user endpoints require authentication using JWT tokens. Include the token in the Authorization header:
+All user endpoints require authentication using JWT tokens. Include the token in the Authorization header:
 
 ```
 Authorization: Bearer {jwt_token}
 ```
+
+## Permissions
+
+User endpoints are protected by role-based permissions:
+- `view_users` - Required to view user listings and individual users
+- `create_users` - Required to create new users
+- `edit_users` - Required to update users
+- `delete_users` - Required to delete users
+
+Admin users have all permissions by default.
 
 ## Base URL
 
@@ -16,279 +26,7 @@ All API endpoints are prefixed with `/api/v1` (or follow your application's API 
 
 ## Endpoints
 
-### 1. Get Authenticated User Information
-
-#### Request
-
-- Method: `GET`
-- Endpoint: `/api/v1/user`
-- Headers:
-  - `Authorization: Bearer {jwt_token}`
-  - `Accept: application/json`
-
-#### Response
-
-```json
-{
-    "success": true,
-    "message": "User retrieved successfully",
-    "data": {
-        "id": 1,
-        "name": "John Doe",
-        "email": "john@example.com",
-        "email_verified_at": "2023-01-01T00:00:00.000000Z",
-        "created_at": "2023-01-01T00:00:00.000000Z",
-        "updated_at": "2023-01-01T00:00:00.000000Z"
-    }
-}
-```
-
----
-
-### 2. Register New User
-
-#### Request
-
-- Method: `POST`
-- Endpoint: `/api/v1/register`
-- Headers:
-  - `Content-Type: application/json`
-  - `Accept: application/json`
-- Body:
-```json
-{
-    "name": "John Doe",
-    "email": "john@example.com",
-    "password": "securePassword123",
-    "password_confirmation": "securePassword123"
-}
-```
-
-#### Response (Success)
-
-```json
-{
-    "success": true,
-    "message": "User registered successfully",
-    "data": {
-        "id": 1,
-        "name": "John Doe",
-        "email": "john@example.com",
-        "token": "jwt_token_here"
-    }
-}
-```
-
-#### Response (Validation Error)
-
-```json
-{
-    "success": false,
-    "message": "Validation failed",
-    "errors": {
-        "email": [
-            "The email has already been taken."
-        ],
-        "password": [
-            "The password confirmation does not match."
-        ]
-    }
-}
-```
-
----
-
-### 3. Login User
-
-#### Request
-
-- Method: `POST`
-- Endpoint: `/api/v1/login`
-- Headers:
-  - `Content-Type: application/json`
-  - `Accept: application/json`
-- Body:
-```json
-{
-    "email": "john@example.com",
-    "password": "securePassword123"
-}
-```
-
-#### Response (Success)
-
-```json
-{
-    "success": true,
-    "message": "Login successful",
-    "data": {
-        "user": {
-            "id": 1,
-            "name": "John Doe",
-            "email": "john@example.com"
-        },
-        "token": "jwt_token_here"
-    }
-}
-```
-
-#### Response (Authentication Error)
-
-```json
-{
-    "success": false,
-    "message": "Invalid credentials"
-}
-```
-
----
-
-### 4. Logout User
-
-#### Request
-
-- Method: `POST`
-- Endpoint: `/api/v1/logout`
-- Headers:
-  - `Authorization: Bearer {jwt_token}`
-  - `Accept: application/json`
-
-#### Response
-
-```json
-{
-    "success": true,
-    "message": "Logout successful"
-}
-```
-
----
-
-### 5. Update User Profile
-
-#### Request
-
-- Method: `PUT` or `PATCH`
-- Endpoint: `/api/v1/user`
-- Headers:
-  - `Authorization: Bearer {jwt_token}`
-  - `Content-Type: application/json`
-  - `Accept: application/json`
-- Body (optional fields):
-```json
-{
-    "name": "Updated Name",
-    "email": "updated-email@example.com"
-}
-```
-
-#### Response
-
-```json
-{
-    "success": true,
-    "message": "Profile updated successfully",
-    "data": {
-        "id": 1,
-        "name": "Updated Name",
-        "email": "updated-email@example.com",
-        "email_verified_at": "2023-01-01T00:00:00.000000Z",
-        "created_at": "2023-01-01T00:00:00.000000Z",
-        "updated_at": "2023-01-01T00:00:00.000000Z"
-    }
-}
-```
-
----
-
-### 6. Change Password
-
-#### Request
-
-- Method: `PUT` or `PATCH`
-- Endpoint: `/api/v1/user/change-password`
-- Headers:
-  - `Authorization: Bearer {jwt_token}`
-  - `Content-Type: application/json`
-  - `Accept: application/json`
-- Body:
-```json
-{
-    "current_password": "currentPassword123",
-    "new_password": "newSecurePassword123",
-    "new_password_confirmation": "newSecurePassword123"
-}
-```
-
-#### Response
-
-```json
-{
-    "success": true,
-    "message": "Password changed successfully"
-}
-```
-
----
-
-### 7. Forgot Password
-
-#### Request
-
-- Method: `POST`
-- Endpoint: `/api/v1/forgot-password`
-- Headers:
-  - `Content-Type: application/json`
-  - `Accept: application/json`
-- Body:
-```json
-{
-    "email": "john@example.com"
-}
-```
-
-#### Response
-
-```json
-{
-    "success": true,
-    "message": "Password reset link sent to your email"
-}
-```
-
----
-
-### 8. Reset Password
-
-#### Request
-
-- Method: `POST`
-- Endpoint: `/api/v1/reset-password`
-- Headers:
-  - `Content-Type: application/json`
-  - `Accept: application/json`
-- Body:
-```json
-{
-    "token": "reset_token_from_email",
-    "email": "john@example.com",
-    "password": "newSecurePassword123",
-    "password_confirmation": "newSecurePassword123"
-}
-```
-
-#### Response
-
-```json
-{
-    "success": true,
-    "message": "Password reset successfully"
-}
-```
-
----
-
-### 9. Get All Users (Admin only)
+### 1. Get All Users
 
 #### Request
 
@@ -297,41 +35,221 @@ All API endpoints are prefixed with `/api/v1` (or follow your application's API 
 - Headers:
   - `Authorization: Bearer {jwt_token}`
   - `Accept: application/json`
+- Query Parameters:
+  - `per_page` (optional): Number of records per page (default: 10)
+  - `search` (optional): Search term to filter by name or email
 
 #### Response
 
 ```json
 {
     "success": true,
-    "message": "Users retrieved successfully",
-    "data": [
-        {
-            "id": 1,
-            "name": "John Doe",
-            "email": "john@example.com",
-            "email_verified_at": "2023-01-01T00:00:00.000000Z",
-            "created_at": "2023-01-01T00:00:00.000000Z",
-            "updated_at": "2023-01-01T00:00:00.000000Z"
+    "data": {
+        "data": [
+            {
+                "id": 1,
+                "name": "John Doe",
+                "email": "john@example.com",
+                "email_verified_at": "2023-01-01T00:00:00.000000Z",
+                "created_at": "2023-01-01T00:00:00.000000Z",
+                "updated_at": "2023-01-01T00:00:00.000000Z"
+            },
+            {
+                "id": 2,
+                "name": "Jane Smith",
+                "email": "jane@example.com",
+                "email_verified_at": "2023-01-01T00:00:00.000000Z",
+                "created_at": "2023-01-01T00:00:00.000000Z",
+                "updated_at": "2023-01-01T00:00:00.000000Z"
+            }
+        ],
+        "links": {
+            "first": "/api/v1/users?page=1",
+            "last": "/api/v1/users?page=3",
+            "prev": null,
+            "next": "/api/v1/users?page=2"
         },
-        {
-            "id": 2,
-            "name": "Jane Smith",
-            "email": "jane@example.com",
-            "email_verified_at": "2023-01-01T00:00:00.000000Z",
-            "created_at": "2023-01-01T00:00:00.000000Z",
-            "updated_at": "2023-01-01T00:00:00.000000Z"
+        "meta": {
+            "current_page": 1,
+            "from": 1,
+            "last_page": 3,
+            "links": [...],
+            "path": "/api/v1/users",
+            "per_page": 10,
+            "to": 10,
+            "total": 25
         }
-    ],
-    "pagination": {
-        "total": 10,
-        "per_page": 15,
-        "current_page": 1,
-        "last_page": 1,
-        "first_page_url": "/api/v1/users?page=1",
-        "last_page_url": "/api/v1/users?page=1",
-        "next_page_url": null,
-        "prev_page_url": null
     }
+}
+```
+
+---
+
+### 2. Get Specific User
+
+#### Request
+
+- Method: `GET`
+- Endpoint: `/api/v1/users/{id}`
+- Headers:
+  - `Authorization: Bearer {jwt_token}`
+  - `Accept: application/json`
+
+#### Response
+
+```json
+{
+    "success": true,
+    "data": {
+        "id": 1,
+        "name": "John Doe",
+        "email": "john@example.com",
+        "email_verified_at": "2023-01-01T00:00:00.000000Z",
+        "created_at": "2023-01-01T00:00:00.000000Z",
+        "updated_at": "2023-01-01T00:00:00.000000Z"
+    }
+}
+```
+
+---
+
+### 3. Create New User
+
+#### Request
+
+- Method: `POST`
+- Endpoint: `/api/v1/users`
+- Headers:
+  - `Content-Type: application/json`
+  - `Accept: application/json`
+  - `Authorization: Bearer {jwt_token}`
+- Body:
+```json
+{
+    "name": "John Doe",
+    "email": "john@example.com",
+    "password": "securePassword123",
+    "password_confirmation": "securePassword123",
+    "role": "operator",
+    "permissions": ["view_users", "edit_users"]
+}
+```
+
+#### Response (Success)
+
+```json
+{
+    "success": true,
+    "message": "User created successfully.",
+    "data": {
+        "id": 1,
+        "name": "John Doe",
+        "email": "john@example.com",
+        "email_verified_at": "2023-01-01T00:00:00.000000Z",
+        "created_at": "2023-01-01T00:00:00.000000Z",
+        "updated_at": "2023-01-01T00:00:00.000000Z"
+    }
+}
+```
+
+#### Response (Validation Error)
+
+```json
+{
+    "message": "The name field is required. (and 1 more error)",
+    "errors": {
+        "name": [
+            "The name field is required."
+        ],
+        "email": [
+            "The email has already been taken."
+        ]
+    }
+}
+```
+
+#### Validation Rules
+- `name`: required, string, max:255
+- `email`: required, email, unique
+- `password`: required, string, min:8, confirmed
+- `role`: required, must be one of ['admin', 'operator', 'manager']
+- `permissions`: array of strings (optional)
+
+---
+
+### 4. Update User
+
+#### Request
+
+- Method: `PUT` or `PATCH`
+- Endpoint: `/api/v1/users/{id}`
+- Headers:
+  - `Content-Type: application/json`
+  - `Accept: application/json`
+  - `Authorization: Bearer {jwt_token}`
+- Body (any combination of these fields):
+```json
+{
+    "name": "Updated Name",
+    "email": "updated@example.com",
+    "password": "newSecurePassword123",
+    "password_confirmation": "newSecurePassword123",
+    "role": "admin",
+    "permissions": ["view_users", "create_users", "edit_users", "delete_users"]
+}
+```
+
+#### Response
+
+```json
+{
+    "success": true,
+    "message": "User updated successfully.",
+    "data": {
+        "id": 1,
+        "name": "Updated Name",
+        "email": "updated@example.com",
+        "email_verified_at": "2023-01-01T00:00:00.000000Z",
+        "created_at": "2023-01-01T00:00:00.000000Z",
+        "updated_at": "2023-01-01T00:00:00.000000Z"
+    }
+}
+```
+
+#### Update Validation Rules
+- `name`: sometimes, string, max:255
+- `email`: sometimes, email, unique (ignoring current user)
+- `password`: sometimes, string, min:8, confirmed
+- `role`: sometimes, must be one of ['admin', 'operator', 'manager']
+- `permissions`: sometimes, array of strings
+
+---
+
+### 5. Delete User
+
+#### Request
+
+- Method: `DELETE`
+- Endpoint: `/api/v1/users/{id}`
+- Headers:
+  - `Authorization: Bearer {jwt_token}`
+  - `Accept: application/json`
+
+#### Response
+
+```json
+{
+    "success": true,
+    "message": "User deleted successfully."
+}
+```
+
+#### Response (Cannot Delete Own Account)
+
+```json
+{
+    "success": false,
+    "message": "Cannot delete your own account."
 }
 ```
 
@@ -343,13 +261,21 @@ Standard error response format:
 
 ```json
 {
-    "success": false,
     "message": "Error message goes here",
     "errors": {
         "field_name": [
             "Error message for specific field"
         ]
     }
+}
+```
+
+Or:
+
+```json
+{
+    "success": false,
+    "message": "Error message goes here"
 }
 ```
 

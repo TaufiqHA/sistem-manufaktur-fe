@@ -28,19 +28,13 @@ export interface Material {
   category: 'RAW' | 'FINISHING' | 'HARDWARE';
 }
 
-export type ProcessStep = 'POTONG' | 'PLONG' | 'PRESS' | 'LAS' | 'WT' | 'POWDER' | 'QC';
-export const ALL_STEPS: ProcessStep[] = ['POTONG', 'PLONG', 'PRESS', 'LAS', 'WT', 'POWDER', 'QC'];
-
-export interface MachineAllocation {
-  id: string;
-  machineId: string;
-  targetQty: number;
-}
+export type ProcessStep = 'POTONG' | 'PLONG' | 'PRESS' | 'LASPEN' | 'LAS_MIG' | 'PHOSPHATING' | 'POWDER' | 'PACKING';
+export const ALL_STEPS: ProcessStep[] = ['POTONG', 'PLONG', 'PRESS', 'LASPEN', 'LAS_MIG', 'PHOSPHATING', 'POWDER', 'PACKING'];
 
 export interface ItemStepConfig {
   step: ProcessStep;
   sequence: number;
-  allocations: MachineAllocation[];
+  machineId: string;
 }
 
 export interface BomItem {

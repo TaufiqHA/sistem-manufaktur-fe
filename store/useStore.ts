@@ -127,7 +127,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     const newTasks: Task[] = [];
     workflow.forEach(step => {
-      step.allocations.forEach(alloc => {
+      if (step.machineId) {
         newTasks.push({
           id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           projectId: project.id,
@@ -135,14 +135,14 @@ export const useStore = create<AppState>((set, get) => ({
           itemId: item.id,
           itemName: item.name,
           step: step.step,
-          machineId: alloc.machineId,
-          targetQty: alloc.targetQty,
+          machineId: step.machineId,
+          targetQty: item.quantity,
           completedQty: 0,
           defectQty: 0,
           status: 'PENDING',
           totalDowntimeMinutes: 0
         });
-      });
+      }
     });
 
     return {

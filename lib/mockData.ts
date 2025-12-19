@@ -13,15 +13,15 @@ export const MOCK_MATERIALS: Material[] = [
   { id: 'm4', code: 'SCREW-M6', name: 'M6 Screw Set', unit: 'Box', currentStock: 500, safetyStock: 200, pricePerUnit: 5, category: 'HARDWARE' },
 ];
 
-// Fix: Added missing 'isMaintenance' property to satisfy Machine interface
 export const MOCK_MACHINES: Machine[] = [
   { id: 'mac1', code: 'CUT-01', name: 'Laser Cutting 01', type: 'POTONG', capacityPerHour: 50, status: 'IDLE', personnel: [{ id: 'p1', name: 'Budi', role: 'PIC', shift: 'SHIFT_1' }, { id: 'p2', name: 'Joko', role: 'OPERATOR', shift: 'SHIFT_1' }], isMaintenance: false },
   { id: 'mac2', code: 'PLG-01', name: 'Punching Machine', type: 'PLONG', capacityPerHour: 80, status: 'IDLE', personnel: [{ id: 'p3', name: 'Agus', role: 'PIC', shift: 'SHIFT_1' }, { id: 'p4', name: 'Dedi', role: 'OPERATOR', shift: 'SHIFT_1' }], isMaintenance: false },
   { id: 'mac3', code: 'PRS-01', name: 'Bending Press 01', type: 'PRESS', capacityPerHour: 30, status: 'IDLE', personnel: [{ id: 'p5', name: 'Rudi', role: 'PIC', shift: 'SHIFT_1' }, { id: 'p6', name: 'Asep', role: 'OPERATOR', shift: 'SHIFT_1' }], isMaintenance: false },
-  { id: 'mac4', code: 'WLD-01', name: 'Welding Station', type: 'LAS', capacityPerHour: 10, status: 'IDLE', personnel: [{ id: 'p7', name: 'Siti', role: 'PIC', shift: 'SHIFT_1' }, { id: 'p8', name: 'Rina', role: 'OPERATOR', shift: 'SHIFT_1' }], isMaintenance: false },
-  { id: 'mac5', code: 'WT-01', name: 'Water Treatment Line', type: 'WT', capacityPerHour: 100, status: 'IDLE', personnel: [{ id: 'p9', name: 'Amin', role: 'PIC', shift: 'SHIFT_1' }, { id: 'p10', name: 'Anto', role: 'OPERATOR', shift: 'SHIFT_1' }], isMaintenance: false },
+  { id: 'mac4', code: 'LAS-01', name: 'Welding Station Laspen', type: 'LASPEN', capacityPerHour: 10, status: 'IDLE', personnel: [{ id: 'p7', name: 'Siti', role: 'PIC', shift: 'SHIFT_1' }, { id: 'p8', name: 'Rina', role: 'OPERATOR', shift: 'SHIFT_1' }], isMaintenance: false },
+  { id: 'mac4b', code: 'MIG-01', name: 'MIG Welding Station', type: 'LAS_MIG', capacityPerHour: 15, status: 'IDLE', personnel: [{ id: 'p7b', name: 'Siti', role: 'PIC', shift: 'SHIFT_1' }, { id: 'p8b', name: 'Rina', role: 'OPERATOR', shift: 'SHIFT_1' }], isMaintenance: false },
+  { id: 'mac5', code: 'PHOS-01', name: 'Phosphating Line', type: 'PHOSPHATING', capacityPerHour: 100, status: 'IDLE', personnel: [{ id: 'p9', name: 'Amin', role: 'PIC', shift: 'SHIFT_1' }, { id: 'p10', name: 'Anto', role: 'OPERATOR', shift: 'SHIFT_1' }], isMaintenance: false },
   { id: 'mac6', code: 'PWD-01', name: 'Powder Coating Line', type: 'POWDER', capacityPerHour: 100, status: 'IDLE', personnel: [{ id: 'p11', name: 'Iwan', role: 'PIC', shift: 'SHIFT_1' }, { id: 'p12', name: 'Edi', role: 'OPERATOR', shift: 'SHIFT_1' }], isMaintenance: false },
-  { id: 'mac7', code: 'QC-01', name: 'QC Table', type: 'QC', capacityPerHour: 200, status: 'IDLE', personnel: [{ id: 'p13', name: 'Lia', role: 'PIC', shift: 'SHIFT_1' }, { id: 'p14', name: 'Tari', role: 'OPERATOR', shift: 'SHIFT_1' }], isMaintenance: false },
+  { id: 'mac7', code: 'PACK-01', name: 'Packing QC Station', type: 'PACKING', capacityPerHour: 200, status: 'IDLE', personnel: [{ id: 'p13', name: 'Lia', role: 'PIC', shift: 'SHIFT_1' }, { id: 'p14', name: 'Tari', role: 'OPERATOR', shift: 'SHIFT_1' }], isMaintenance: false },
 ];
 
 export const MOCK_PROJECTS: Project[] = [

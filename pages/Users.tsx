@@ -20,6 +20,12 @@ interface UserFormData {
   email: string;
   role: 'ADMIN' | 'OPERATOR' | 'MANAGER';
   password?: string;
+  password_confirmation?: string;
+  permissions: PermissionMap;
+}
+
+interface FieldErrors {
+  [key: string]: string[];
 }
 
 export const Users: React.FC = () => {
@@ -28,6 +34,7 @@ export const Users: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,7 +42,7 @@ export const Users: React.FC = () => {
   const itemsPerPage = 8;
 
   const [formData, setFormData] = useState<UserFormData>({
-    name: '', email: '', role: 'OPERATOR'
+    name: '', email: '', role: 'OPERATOR', password: '', password_confirmation: '', permissions: INITIAL_PERMISSIONS
   });
 
   // Fetch users on mount and when search changes
@@ -46,7 +53,7 @@ export const Users: React.FC = () => {
       try {
         const response = await apiClient.getUsers(currentPage, itemsPerPage, searchTerm);
         if (response.success && response.data) {
-          setUsers(response.data.data);
+          setUsers(response.data.data.filter((user: UserData | null | undefined): user is UserData => user != null));
         } else {
           setError(response.message || 'Gagal memuat data pengguna');
         }
@@ -65,7 +72,9 @@ export const Users: React.FC = () => {
 
   const handleOpenEdit = (u: UserData) => {
     setEditingId(u.id || null);
-    setFormData({ name: u.name, email: u.email, role: u.role });
+    setFormData({ name: u.name, email: u.email, role: u.role, password: '', password_confirmation: '', permissions: u.permissions || INITIAL_PERMISSIONS });
+    setFieldErrors({});
+    setError(null);
     setIsModalOpen(true);
   };
 
@@ -73,24 +82,45 @@ export const Users: React.FC = () => {
     e.preventDefault();
     setIsSaving(true);
     setError(null);
+    setFieldErrors({});
     try {
       if (editingId) {
-        const response = await apiClient.updateUser(editingId, { name: formData.name, email: formData.email, role: formData.role });
+        const updateData: any = { name: formData.name, email: formData.email, role: formData.role.toLowerCase(), permissions: formData.permissions };
+        if (formData.password) {
+          updateData.password = formData.password;
+          updateData.password_confirmation = formData.password_confirmation;
+        }
+        const response = await apiClient.updateUser(editingId, updateData);
         if (response.success && response.data) {
           setUsers(users.map(u => u.id === editingId ? response.data.data : u));
+          setIsModalOpen(false);
+          setFormData({ name: '', email: '', role: 'OPERATOR', password: '', password_confirmation: '', permissions: INITIAL_PERMISSIONS });
         } else {
+          if ((response as any).errors && typeof (response as any).errors === 'object') {
+            setFieldErrors((response as any).errors);
+          }
           setError(response.message || 'Gagal memperbarui pengguna');
         }
       } else {
-        const response = await apiClient.createUser({ name: formData.name, email: formData.email, role: formData.role, password: formData.password });
+        const response = await apiClient.createUser({
+          name: formData.name,
+          email: formData.email,
+          role: formData.role.toLowerCase(),
+          password: formData.password,
+          password_confirmation: formData.password_confirmation,
+          permissions: formData.permissions
+        });
         if (response.success && response.data) {
           setUsers([response.data.data, ...users]);
+          setIsModalOpen(false);
+          setFormData({ name: '', email: '', role: 'OPERATOR', password: '', password_confirmation: '', permissions: INITIAL_PERMISSIONS });
         } else {
+          if ((response as any).errors && typeof (response as any).errors === 'object') {
+            setFieldErrors((response as any).errors);
+          }
           setError(response.message || 'Gagal membuat pengguna');
         }
       }
-      setIsModalOpen(false);
-      setFormData({ name: '', email: '', role: 'OPERATOR' });
     } catch (err) {
       setError('Terjadi kesalahan saat menyimpan pengguna');
       console.error('Error submitting form:', err);
@@ -129,7 +159,9 @@ export const Users: React.FC = () => {
         <button
           onClick={() => {
             setEditingId(null);
-            setFormData({ name: '', email: '', role: 'OPERATOR' });
+            setFormData({ name: '', email: '', role: 'OPERATOR', password: '', password_confirmation: '', permissions: INITIAL_PERMISSIONS });
+            setFieldErrors({});
+            setError(null);
             setIsModalOpen(true);
           }}
           disabled={isSaving}
@@ -181,7 +213,9 @@ export const Users: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 font-bold">
                 {users.length > 0 ? (
-                  users.map(user => (
+                  users.map(user => {
+                    if (!user || !user.name || !user.email) return null;
+                    return (
                     <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
                       <td className="px-8 py-5 flex items-center gap-4">
                         <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center font-black text-slate-400 shadow-sm">{user.name.charAt(0)}</div>
@@ -208,7 +242,8 @@ export const Users: React.FC = () => {
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={4} className="px-8 py-12 text-center text-slate-500 font-bold">Tidak ada data pengguna</td>
@@ -230,7 +265,7 @@ export const Users: React.FC = () => {
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
-          <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
+          <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95">
             <div className="p-10 border-b bg-slate-50 flex justify-between items-center">
               <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{editingId ? 'Edit Pengguna' : 'Daftar Pengguna Baru'}</h3>
               <button onClick={() => setIsModalOpen(false)} disabled={isSaving} className="p-2.5 hover:bg-slate-200 rounded-full transition-all disabled:opacity-50"><X size={28}/></button>
@@ -242,10 +277,13 @@ export const Users: React.FC = () => {
                   <input
                     required
                     disabled={isSaving}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+                    className={`w-full p-4 bg-slate-50 border ${fieldErrors.name ? 'border-red-300' : 'border-slate-200'} rounded-2xl font-black outline-none focus:ring-4 ${fieldErrors.name ? 'focus:ring-red-100' : 'focus:ring-blue-100'} disabled:bg-slate-100 disabled:text-slate-400`}
                     value={formData.name}
                     onChange={e => setFormData({...formData, name: e.target.value})}
                   />
+                  {fieldErrors.name && (
+                    <p className="text-xs text-red-600 font-black">{fieldErrors.name[0]}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email</label>
@@ -253,36 +291,97 @@ export const Users: React.FC = () => {
                     required
                     type="email"
                     disabled={isSaving}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+                    className={`w-full p-4 bg-slate-50 border ${fieldErrors.email ? 'border-red-300' : 'border-slate-200'} rounded-2xl font-black outline-none focus:ring-4 ${fieldErrors.email ? 'focus:ring-red-100' : 'focus:ring-blue-100'} disabled:bg-slate-100 disabled:text-slate-400`}
                     value={formData.email}
                     onChange={e => setFormData({...formData, email: e.target.value})}
                   />
+                  {fieldErrors.email && (
+                    <p className="text-xs text-red-600 font-black">{fieldErrors.email[0]}</p>
+                  )}
                 </div>
                 {!editingId && (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Password</label>
-                    <input
-                      required
-                      type="password"
-                      disabled={isSaving}
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
-                      value={formData.password || ''}
-                      onChange={e => setFormData({...formData, password: e.target.value})}
-                    />
-                  </div>
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Password</label>
+                      <input
+                        required
+                        type="password"
+                        disabled={isSaving}
+                        className={`w-full p-4 bg-slate-50 border ${fieldErrors.password ? 'border-red-300' : 'border-slate-200'} rounded-2xl font-black outline-none focus:ring-4 ${fieldErrors.password ? 'focus:ring-red-100' : 'focus:ring-blue-100'} disabled:bg-slate-100 disabled:text-slate-400`}
+                        value={formData.password || ''}
+                        onChange={e => setFormData({...formData, password: e.target.value})}
+                      />
+                      {fieldErrors.password && (
+                        <p className="text-xs text-red-600 font-black">{fieldErrors.password[0]}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Konfirmasi Password</label>
+                      <input
+                        required
+                        type="password"
+                        disabled={isSaving}
+                        className={`w-full p-4 bg-slate-50 border ${fieldErrors.password_confirmation ? 'border-red-300' : 'border-slate-200'} rounded-2xl font-black outline-none focus:ring-4 ${fieldErrors.password_confirmation ? 'focus:ring-red-100' : 'focus:ring-blue-100'} disabled:bg-slate-100 disabled:text-slate-400`}
+                        value={formData.password_confirmation || ''}
+                        onChange={e => setFormData({...formData, password_confirmation: e.target.value})}
+                      />
+                      {fieldErrors.password_confirmation && (
+                        <p className="text-xs text-red-600 font-black">{fieldErrors.password_confirmation[0]}</p>
+                      )}
+                    </div>
+                  </>
                 )}
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Role</label>
                   <select
                     disabled={isSaving}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+                    className={`w-full p-4 bg-slate-50 border ${fieldErrors.role ? 'border-red-300' : 'border-slate-200'} rounded-2xl font-black outline-none focus:ring-4 ${fieldErrors.role ? 'focus:ring-red-100' : 'focus:ring-blue-100'} disabled:bg-slate-100 disabled:text-slate-400`}
                     value={formData.role}
                     onChange={e => setFormData({...formData, role: e.target.value as 'ADMIN' | 'OPERATOR' | 'MANAGER'})}
                   >
-                    <option value="OPERATOR">OPERATOR</option>
-                    <option value="MANAGER">MANAGER</option>
-                    <option value="ADMIN">ADMIN</option>
+                    <option value="operator">operator</option>
+                    <option value="manager">manager</option>
+                    <option value="admin">admin</option>
                   </select>
+                  {fieldErrors.role && (
+                    <p className="text-xs text-red-600 font-black">{fieldErrors.role[0]}</p>
+                  )}
+                </div>
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Izin Akses Modul</label>
+                  <div className="space-y-3 bg-white border border-slate-200 rounded-2xl p-4 max-h-64 overflow-y-auto">
+                    {MODULES.map(module => (
+                      <div key={module} className="space-y-2">
+                        <div className="font-black text-sm text-slate-700 uppercase tracking-wider">{module}</div>
+                        <div className="grid grid-cols-2 gap-3 pl-4">
+                          {(['view', 'create', 'edit', 'delete'] as const).map(permission => (
+                            <label key={permission} className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                disabled={isSaving}
+                                checked={formData.permissions[module][permission]}
+                                onChange={e => setFormData({
+                                  ...formData,
+                                  permissions: {
+                                    ...formData.permissions,
+                                    [module]: {
+                                      ...formData.permissions[module],
+                                      [permission]: e.target.checked
+                                    }
+                                  }
+                                })}
+                                className="w-4 h-4 rounded border-slate-300 text-blue-600 cursor-pointer accent-blue-600"
+                              />
+                              <span className="text-sm font-bold text-slate-600 capitalize">{permission}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {fieldErrors.permissions && (
+                    <p className="text-xs text-red-600 font-black">{fieldErrors.permissions[0]}</p>
+                  )}
                 </div>
               </form>
             </div>
