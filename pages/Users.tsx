@@ -15,6 +15,25 @@ const INITIAL_PERMISSIONS: PermissionMap = {
 
 const MODULES: ModuleName[] = ['DASHBOARD', 'PROJECTS', 'MATERIALS', 'MACHINES', 'USERS', 'REPORTS'];
 
+const AVAILABLE_PERMISSIONS = [
+  'view_users',
+  'create_users',
+  'edit_users',
+  'delete_users',
+  'view_products',
+  'create_products',
+  'edit_products',
+  'delete_products',
+  'view_orders',
+  'create_orders',
+  'edit_orders',
+  'delete_orders',
+  'view_reports',
+  'manage_inventory',
+  'manage_finances',
+  'access_dashboard',
+];
+
 interface UserFormData {
   name: string;
   email: string;
@@ -22,6 +41,7 @@ interface UserFormData {
   password?: string;
   password_confirmation?: string;
   permissions: PermissionMap;
+  permissionStrings?: string[];
 }
 
 interface FieldErrors {
@@ -44,6 +64,25 @@ export const Users: React.FC = () => {
   const [formData, setFormData] = useState<UserFormData>({
     name: '', email: '', role: 'OPERATOR', password: '', password_confirmation: '', permissions: INITIAL_PERMISSIONS
   });
+
+  const parseBackendPermissions = (permissionsData: any): string[] => {
+    if (!permissionsData) return [];
+
+    if (typeof permissionsData === 'string') {
+      try {
+        return JSON.parse(permissionsData);
+      } catch (e) {
+        console.error('Failed to parse permissions string:', e);
+        return [];
+      }
+    }
+
+    if (Array.isArray(permissionsData)) {
+      return permissionsData;
+    }
+
+    return [];
+  };
 
   // Fetch users on mount and when search changes
   useEffect(() => {
@@ -70,11 +109,56 @@ export const Users: React.FC = () => {
 
   if (!can('view', 'USERS')) return <div className="p-12 text-center text-slate-500 font-bold">Akses Ditolak.</div>;
 
-  const handleOpenEdit = (u: UserData) => {
+  const mergePermissions = (userPerms?: PermissionMap): PermissionMap => {
+    return { ...INITIAL_PERMISSIONS, ...userPerms };
+  };
+
+  const handleOpenEdit = async (u: UserData) => {
     setEditingId(u.id || null);
-    setFormData({ name: u.name, email: u.email, role: u.role, password: '', password_confirmation: '', permissions: u.permissions || INITIAL_PERMISSIONS });
     setFieldErrors({});
     setError(null);
+    try {
+      // Fetch full user details with permissions from API
+      const response = await apiClient.getUser(u.id || 0);
+      if (response.success && response.data) {
+        const userData = response.data;
+        const permissionStrings = parseBackendPermissions(userData.permissions);
+        setFormData({
+          name: userData.name,
+          email: userData.email,
+          role: userData.role,
+          password: '',
+          password_confirmation: '',
+          permissions: mergePermissions(userData.permissions),
+          permissionStrings
+        });
+      } else {
+        // Fallback to local user data if API fails
+        const permissionStrings = parseBackendPermissions(u.permissions);
+        setFormData({
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          password: '',
+          password_confirmation: '',
+          permissions: mergePermissions(u.permissions),
+          permissionStrings
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching user details:', err);
+      // Fallback to local user data
+      const permissionStrings = parseBackendPermissions(u.permissions);
+      setFormData({
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        password: '',
+        password_confirmation: '',
+        permissions: mergePermissions(u.permissions),
+        permissionStrings
+      });
+    }
     setIsModalOpen(true);
   };
 
@@ -85,7 +169,12 @@ export const Users: React.FC = () => {
     setFieldErrors({});
     try {
       if (editingId) {
-        const updateData: any = { name: formData.name, email: formData.email, role: formData.role.toLowerCase(), permissions: formData.permissions };
+        const updateData: any = {
+          name: formData.name,
+          email: formData.email,
+          role: formData.role.toLowerCase(),
+          permissions: formData.permissionStrings || []
+        };
         if (formData.password) {
           updateData.password = formData.password;
           updateData.password_confirmation = formData.password_confirmation;
@@ -94,7 +183,7 @@ export const Users: React.FC = () => {
         if (response.success && response.data) {
           setUsers(users.map(u => u.id === editingId ? response.data.data : u));
           setIsModalOpen(false);
-          setFormData({ name: '', email: '', role: 'OPERATOR', password: '', password_confirmation: '', permissions: INITIAL_PERMISSIONS });
+          setFormData({ name: '', email: '', role: 'OPERATOR', password: '', password_confirmation: '', permissions: INITIAL_PERMISSIONS, permissionStrings: [] });
         } else {
           if ((response as any).errors && typeof (response as any).errors === 'object') {
             setFieldErrors((response as any).errors);
@@ -108,12 +197,12 @@ export const Users: React.FC = () => {
           role: formData.role.toLowerCase(),
           password: formData.password,
           password_confirmation: formData.password_confirmation,
-          permissions: formData.permissions
+          permissions: formData.permissionStrings || []
         });
         if (response.success && response.data) {
           setUsers([response.data.data, ...users]);
           setIsModalOpen(false);
-          setFormData({ name: '', email: '', role: 'OPERATOR', password: '', password_confirmation: '', permissions: INITIAL_PERMISSIONS });
+          setFormData({ name: '', email: '', role: 'OPERATOR', password: '', password_confirmation: '', permissions: INITIAL_PERMISSIONS, permissionStrings: [] });
         } else {
           if ((response as any).errors && typeof (response as any).errors === 'object') {
             setFieldErrors((response as any).errors);
@@ -159,7 +248,7 @@ export const Users: React.FC = () => {
         <button
           onClick={() => {
             setEditingId(null);
-            setFormData({ name: '', email: '', role: 'OPERATOR', password: '', password_confirmation: '', permissions: INITIAL_PERMISSIONS });
+            setFormData({ name: '', email: '', role: 'OPERATOR', password: '', password_confirmation: '', permissions: INITIAL_PERMISSIONS, permissionStrings: [] });
             setFieldErrors({});
             setError(null);
             setIsModalOpen(true);
@@ -348,36 +437,32 @@ export const Users: React.FC = () => {
                   )}
                 </div>
                 <div className="space-y-4">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Izin Akses Modul</label>
-                  <div className="space-y-3 bg-white border border-slate-200 rounded-2xl p-4 max-h-64 overflow-y-auto">
-                    {MODULES.map(module => (
-                      <div key={module} className="space-y-2">
-                        <div className="font-black text-sm text-slate-700 uppercase tracking-wider">{module}</div>
-                        <div className="grid grid-cols-2 gap-3 pl-4">
-                          {(['view', 'create', 'edit', 'delete'] as const).map(permission => (
-                            <label key={permission} className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                disabled={isSaving}
-                                checked={formData.permissions[module][permission]}
-                                onChange={e => setFormData({
-                                  ...formData,
-                                  permissions: {
-                                    ...formData.permissions,
-                                    [module]: {
-                                      ...formData.permissions[module],
-                                      [permission]: e.target.checked
-                                    }
-                                  }
-                                })}
-                                className="w-4 h-4 rounded border-slate-300 text-blue-600 cursor-pointer accent-blue-600"
-                              />
-                              <span className="text-sm font-bold text-slate-600 capitalize">{permission}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Izin Akses</label>
+                  <div className="space-y-3 bg-white border border-slate-200 rounded-2xl p-4 max-h-96 overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-4">
+                      {AVAILABLE_PERMISSIONS.map(permission => (
+                        <label key={permission} className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors">
+                          <input
+                            type="checkbox"
+                            disabled={isSaving}
+                            checked={formData.permissionStrings?.includes(permission) ?? false}
+                            onChange={e => {
+                              const newPermissions = e.target.checked
+                                ? [...(formData.permissionStrings || []), permission]
+                                : (formData.permissionStrings || []).filter(p => p !== permission);
+                              setFormData({
+                                ...formData,
+                                permissionStrings: newPermissions
+                              });
+                            }}
+                            className="w-4 h-4 rounded border-slate-300 text-blue-600 cursor-pointer accent-blue-600"
+                          />
+                          <span className="text-sm font-bold text-slate-600 capitalize">
+                            {permission.replace(/_/g, ' ')}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
                   {fieldErrors.permissions && (
                     <p className="text-xs text-red-600 font-black">{fieldErrors.permissions[0]}</p>

@@ -87,7 +87,7 @@ interface UserCreateRequest {
   password?: string;
   password_confirmation?: string;
   role?: "ADMIN" | "OPERATOR" | "MANAGER";
-  permissions?: Record<string, Record<string, boolean>>;
+  permissions?: Record<string, Record<string, boolean>> | string[];
 }
 
 interface UserUpdateRequest {
@@ -96,7 +96,7 @@ interface UserUpdateRequest {
   role?: "ADMIN" | "OPERATOR" | "MANAGER";
   password?: string;
   password_confirmation?: string;
-  permissions?: Record<string, Record<string, boolean>>;
+  permissions?: Record<string, Record<string, boolean>> | string[];
 }
 
 interface ProjectData {
