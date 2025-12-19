@@ -68,7 +68,8 @@ export const Login: React.FC = () => {
         };
 
         loginUser(user);
-        navigate('/');
+        // Redirect operators to machine-board, others to dashboard
+        navigate(normalizedRole === 'OPERATOR' ? '/machine-board' : '/');
       } else {
         setError(response.message || 'Login gagal. Periksa email dan password Anda.');
       }

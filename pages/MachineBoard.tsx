@@ -16,10 +16,13 @@ export const MachineBoard: React.FC = () => {
 
   const [selectedMachineId, setSelectedMachineId] = useState<string>('');
   const [selectedShift, setSelectedShift] = useState<Shift>('SHIFT_1');
+  const [operatorShift, setOperatorShift] = useState<Shift | null>(null);
   const [reportModal, setReportModal] = useState<TaskData | null>(null);
   const [qtyGood, setQtyGood] = useState<number>(0);
   const [qtyDefect, setQtyDefect] = useState<number>(0);
   const [isSaving, setIsSaving] = useState(false);
+
+  const isOperator = currentUser?.role === 'OPERATOR';
 
   // Fetch machines from API on component mount
   useEffect(() => {
@@ -32,11 +35,23 @@ export const MachineBoard: React.FC = () => {
 
           // Filter based on user role
           let filteredMachines = machineList;
+          let detectedShift: Shift | null = null;
+
           if (currentUser && currentUser.role !== 'ADMIN' && currentUser.role !== 'MANAGER') {
             // Filter machines where current user is listed in personnel
             filteredMachines = machineList.filter((m: any) =>
               m.personnel?.some((p: any) => p.name === currentUser.name)
             );
+
+            // For operators, detect their assigned shift from the first machine
+            if (isOperator && filteredMachines.length > 0) {
+              const operatorPersonnel = filteredMachines[0].personnel?.find((p: any) => p.name === currentUser.name);
+              if (operatorPersonnel?.shift) {
+                detectedShift = operatorPersonnel.shift as Shift;
+                setOperatorShift(detectedShift);
+                setSelectedShift(detectedShift);
+              }
+            }
           }
 
           setApiMachines(filteredMachines);
@@ -55,7 +70,14 @@ export const MachineBoard: React.FC = () => {
     };
 
     fetchMachines();
-  }, [currentUser]);
+  }, [currentUser, isOperator]);
+
+  // Keep operator shift in sync with selected shift
+  useEffect(() => {
+    if (isOperator && operatorShift) {
+      setSelectedShift(operatorShift);
+    }
+  }, [operatorShift, isOperator]);
 
   // Fetch tasks and logs from API
   useEffect(() => {
@@ -262,20 +284,32 @@ export const MachineBoard: React.FC = () => {
                     {apiMachines.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}
                 </select>
             </div>
-            <div className="w-full md:w-1/2 flex gap-4">
-                <div className="flex-1">
-                    <label className="text-[10px] text-slate-400 font-black uppercase block mb-3 tracking-widest flex items-center gap-2"><Clock size={12}/> Shift Produksi</label>
-                    <select 
-                        value={selectedShift}
-                        onChange={(e) => setSelectedShift(e.target.value as Shift)}
-                        className="w-full font-black text-lg bg-slate-50 border-none p-6 rounded-[28px] outline-none shadow-inner focus:ring-4 focus:ring-blue-100 transition-all"
-                    >
-                        <option value="SHIFT_1">SHIFT 1 (PAGI)</option>
-                        <option value="SHIFT_2">SHIFT 2 (SORE)</option>
-                        <option value="SHIFT_3">SHIFT 3 (MALAM)</option>
-                    </select>
-                </div>
-            </div>
+            {!isOperator && (
+              <div className="w-full md:w-1/2 flex gap-4">
+                  <div className="flex-1">
+                      <label className="text-[10px] text-slate-400 font-black uppercase block mb-3 tracking-widest flex items-center gap-2"><Clock size={12}/> Shift Produksi</label>
+                      <select
+                          value={selectedShift}
+                          onChange={(e) => setSelectedShift(e.target.value as Shift)}
+                          className="w-full font-black text-lg bg-slate-50 border-none p-6 rounded-[28px] outline-none shadow-inner focus:ring-4 focus:ring-blue-100 transition-all"
+                      >
+                          <option value="SHIFT_1">SHIFT 1 (PAGI)</option>
+                          <option value="SHIFT_2">SHIFT 2 (SORE)</option>
+                          <option value="SHIFT_3">SHIFT 3 (MALAM)</option>
+                      </select>
+                  </div>
+              </div>
+            )}
+            {isOperator && (
+              <div className="w-full md:w-1/2 flex gap-4">
+                  <div className="flex-1 bg-blue-50 p-6 rounded-[28px] border border-blue-200 flex items-center gap-4 justify-between">
+                      <div>
+                          <p className="text-[10px] text-blue-600 font-black uppercase block tracking-widest flex items-center gap-2"><Clock size={12}/> Shift Anda</p>
+                          <p className="text-xl font-black text-blue-700 mt-2">{operatorShift === 'SHIFT_1' ? 'SHIFT 1 (PAGI)' : operatorShift === 'SHIFT_2' ? 'SHIFT 2 (SORE)' : 'SHIFT 3 (MALAM)'}</p>
+                      </div>
+                  </div>
+              </div>
+            )}
         </div>
         <div className="lg:col-span-4 bg-slate-900 text-white p-10 rounded-[48px] flex flex-col justify-center shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none rotate-12"><Activity size={100}/></div>

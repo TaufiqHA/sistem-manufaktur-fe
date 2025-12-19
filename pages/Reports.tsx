@@ -1,22 +1,101 @@
-
-import React, { useState, useMemo } from 'react';
-import { useStore } from '../store/useStore';
-import { 
-    TrendingUp, ArrowUpRight, BarChart3, PieChart, Activity, Layers, Filter, History, Search, ArrowDownRight, Clock
+import React, { useState, useMemo, useEffect } from 'react';
+import { apiClient } from '../lib/api';
+import {
+    TrendingUp, ArrowUpRight, BarChart3, PieChart, Activity, Layers, Filter, History, Search, ArrowDownRight, Clock, Loader
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
+interface Machine {
+  id?: number | string;
+  code: string;
+  name: string;
+  type: string;
+  capacity_per_hour: number;
+  status: string;
+  personnel?: any[];
+  is_maintenance: boolean;
+}
+
+interface Project {
+  id?: number | string;
+  code: string;
+  name: string;
+  customer: string;
+  start_date: string;
+  deadline: string;
+  status: string;
+  progress: number;
+  qty_per_unit: number;
+  procurement_qty: number;
+  total_qty: number;
+  unit: string;
+  is_locked: boolean;
+}
+
+interface ProductionLog {
+  id?: number | string;
+  task_id?: number | string;
+  machine_id?: number | string;
+  item_id?: number | string;
+  project_id?: number | string;
+  step: string;
+  shift: string;
+  good_qty: number;
+  defect_qty: number;
+  operator: string;
+  logged_at: string;
+  type: string;
+}
+
 export const Reports: React.FC = () => {
-  const { logs, machines, projects, items } = useStore();
+  const [logs, setLogs] = useState<ProductionLog[]>([]);
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [selectedProjectId, setSelectedProjectId] = useState<string>('ALL');
   const [filterType, setFilterType] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY'>('DAILY');
   const [searchTerm, setSearchTerm] = useState('');
 
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [logsRes, machinesRes, projectsRes] = await Promise.all([
+          apiClient.getProductionLogs(1, 1000),
+          apiClient.getMachines(),
+          apiClient.getProjects()
+        ]);
+
+        if (logsRes.success && logsRes.data) {
+          const logsList = Array.isArray(logsRes.data) ? logsRes.data : (logsRes.data.data || []);
+          setLogs(logsList);
+        }
+
+        if (machinesRes.success && machinesRes.data) {
+          const machinesList = Array.isArray(machinesRes.data) ? machinesRes.data : (machinesRes.data.data || []);
+          setMachines(machinesList);
+        }
+
+        if (projectsRes.success && projectsRes.data) {
+          const projectsList = Array.isArray(projectsRes.data) ? projectsRes.data : (projectsRes.data.data || []);
+          setProjects(projectsList);
+        }
+      } catch (err) {
+        console.error('Error fetching report data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
-      const matchesProject = selectedProjectId === 'ALL' || log.projectId === selectedProjectId;
-      
-      const d = new Date(log.timestamp);
+      const matchesProject = selectedProjectId === 'ALL' || log.project_id === selectedProjectId;
+
+      const d = new Date(log.logged_at);
       const now = new Date();
       let matchesTime = true;
       if (filterType === 'DAILY') matchesTime = d.toDateString() === now.toDateString();
@@ -26,21 +105,20 @@ export const Reports: React.FC = () => {
           matchesTime = d >= lastWeek;
       }
       if (filterType === 'MONTHLY') matchesTime = d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      
-      const item = items.find(i => i.id === log.itemId);
-      const machine = machines.find(m => m.id === log.machineId);
-      const matchesSearch = !searchTerm || 
-        item?.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+
+      const machine = machines.find(m => m.id === log.machine_id);
+      const matchesSearch = !searchTerm ||
+        log.step.toLowerCase().includes(searchTerm.toLowerCase()) ||
         machine?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.operator.toLowerCase().includes(searchTerm.toLowerCase());
 
       return matchesProject && matchesTime && matchesSearch;
     });
-  }, [logs, selectedProjectId, filterType, searchTerm, items, machines]);
+  }, [logs, selectedProjectId, filterType, searchTerm, machines]);
 
   const summary = useMemo(() => {
-    const good = filteredLogs.reduce((acc, curr) => acc + curr.goodQty, 0);
-    const defect = filteredLogs.reduce((acc, curr) => acc + curr.defectQty, 0);
+    const good = filteredLogs.reduce((acc, curr) => acc + curr.good_qty, 0);
+    const defect = filteredLogs.reduce((acc, curr) => acc + curr.defect_qty, 0);
     const efficiency = (good + defect) > 0 ? (good / (good + defect)) * 100 : 100;
     return { good, defect, efficiency };
   }, [filteredLogs]);
@@ -48,13 +126,24 @@ export const Reports: React.FC = () => {
   const chartData = useMemo(() => {
       const data: Record<string, {name: string, good: number, defect: number}> = {};
       filteredLogs.forEach(log => {
-          const machine = machines.find(m => m.id === log.machineId)?.name || 'Unknown';
+          const machine = machines.find(m => m.id === log.machine_id)?.name || 'Unknown';
           if (!data[machine]) data[machine] = { name: machine, good: 0, defect: 0 };
-          data[machine].good += log.goodQty;
-          data[machine].defect += log.defectQty;
+          data[machine].good += log.good_qty;
+          data[machine].defect += log.defect_qty;
       });
       return Object.values(data);
   }, [filteredLogs, machines]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <div className="text-center space-y-6">
+          <Loader size={48} className="text-blue-600 animate-spin mx-auto" />
+          <p className="text-xl font-black uppercase tracking-widest text-slate-500">Memuat Data Analytics...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10 pb-20">
@@ -133,20 +222,19 @@ export const Reports: React.FC = () => {
               </div>
               <div className="flex-1 overflow-y-auto pr-2 space-y-4 max-h-[400px]">
                  {filteredLogs.map(log => {
-                    const machine = machines.find(m => m.id === log.machineId);
-                    const item = items.find(i => i.id === log.itemId);
+                    const machine = machines.find(m => m.id === log.machine_id);
                     return (
                        <div key={log.id} className="bg-slate-50 p-6 rounded-[28px] border border-slate-100 flex items-center justify-between group hover:bg-white hover:shadow-lg transition-all">
                           <div className="flex gap-5 items-center">
                              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-300 shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-all"><Clock size={24}/></div>
                              <div>
-                                <p className="text-slate-800 font-black text-sm uppercase">{item?.name || 'Unknown Item'}</p>
+                                <p className="text-slate-800 font-black text-sm uppercase">{log.step}</p>
                                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{machine?.name} &bull; OP: {log.operator}</p>
                              </div>
                           </div>
                           <div className="text-right">
-                             <p className="text-sm font-black text-emerald-600">+{log.goodQty} Good</p>
-                             <p className="text-[10px] font-bold text-slate-300 uppercase">{new Date(log.timestamp).toLocaleTimeString()}</p>
+                             <p className="text-sm font-black text-emerald-600">+{log.good_qty} Good</p>
+                             <p className="text-[10px] font-bold text-slate-300 uppercase">{new Date(log.logged_at).toLocaleTimeString()}</p>
                           </div>
                        </div>
                     )

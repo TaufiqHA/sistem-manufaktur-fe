@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
@@ -33,7 +32,13 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   if (location.pathname === '/tv-display') return <div className="min-h-screen bg-slate-900 text-white">{children}</div>;
 
   const handleLogout = () => { logout(); navigate('/login'); };
-  const filteredNav = NAV_ITEMS.filter(item => can('view', item.module));
+
+  // Filter navigation based on user role
+  let filteredNav = NAV_ITEMS.filter(item => can('view', item.module));
+  if (currentUser?.role === 'OPERATOR') {
+    // Operators only see Operator Board
+    filteredNav = filteredNav.filter(item => item.path === '/machine-board');
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex overflow-hidden">

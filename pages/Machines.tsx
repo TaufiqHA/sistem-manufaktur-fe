@@ -22,9 +22,11 @@ interface FormMachine {
 }
 
 export const Machines: React.FC = () => {
-  const { can, users } = useStore();
+  const { can } = useStore();
   const [machines, setMachines] = useState<FormMachine[]>([]);
+  const [employees, setEmployees] = useState<Array<{ id?: number; name: string; email?: string; role?: string }>>([]);
   const [loading, setLoading] = useState(true);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -48,6 +50,20 @@ export const Machines: React.FC = () => {
   useEffect(() => {
     fetchMachines();
   }, []);
+
+  const fetchEmployees = async () => {
+    setEmployeesLoading(true);
+    try {
+      const response = await apiClient.getUsers(1, 100);
+      if (response.success && response.data?.data) {
+        setEmployees(response.data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching employees:', err);
+    } finally {
+      setEmployeesLoading(false);
+    }
+  };
 
   const fetchMachines = async () => {
     setLoading(true);
@@ -118,6 +134,7 @@ export const Machines: React.FC = () => {
       ...m,
       personnel: Array.isArray(m.personnel) ? m.personnel : [],
     });
+    fetchEmployees();
     setIsModalOpen(true);
   };
 
@@ -179,6 +196,7 @@ export const Machines: React.FC = () => {
               personnel: [],
               is_maintenance: false,
             });
+            fetchEmployees();
             setIsModalOpen(true);
           }}
           className="bg-slate-900 text-white px-8 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl hover:bg-slate-800 transition-colors disabled:opacity-50"
@@ -466,11 +484,12 @@ export const Machines: React.FC = () => {
                               ),
                             }))
                           }
+                          disabled={employeesLoading}
                         >
-                          <option value="">Pilih Karyawan...</option>
-                          {users.map(u => (
+                          <option value="">{employeesLoading ? 'Memuat...' : 'Pilih Karyawan...'}</option>
+                          {employees.map(u => (
                             <option key={u.id} value={u.name}>
-                              {u.name} (@{u.username})
+                              {u.name}
                             </option>
                           ))}
                         </select>

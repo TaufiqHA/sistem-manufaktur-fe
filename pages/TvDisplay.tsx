@@ -1,14 +1,42 @@
-
 import React, { useEffect, useState } from 'react';
-import { useStore } from '../store/useStore';
-import { Clock, ArrowLeft, Activity, Monitor, Layers, Box, TrendingUp } from 'lucide-react';
+import { apiClient } from '../lib/api';
+import { Clock, ArrowLeft, Activity, Monitor, Layers, Box, TrendingUp, Loader } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+interface Machine {
+  id?: number | string;
+  code: string;
+  name: string;
+  type: string;
+  capacity_per_hour: number;
+  status: 'IDLE' | 'RUNNING' | 'MAINTENANCE' | 'OFFLINE' | 'DOWNTIME';
+  personnel?: any[];
+  is_maintenance: boolean;
+}
+
+interface Task {
+  id?: number | string;
+  project_id?: number | string;
+  project_name: string;
+  item_id?: number | string;
+  item_name: string;
+  step: string;
+  machine_id?: number | string;
+  target_qty: number;
+  completed_qty: number;
+  defect_qty: number;
+  status: string;
+  shift?: string;
+  total_downtime_minutes?: number;
+}
+
 export const TvDisplay: React.FC = () => {
-  const { machines, tasks } = useStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [time, setTime] = useState(new Date());
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Logic: Get group from URL (?group=1, ?group=2)
   const groupIdx = parseInt(searchParams.get('group') || '1') - 1;
@@ -19,6 +47,48 @@ export const TvDisplay: React.FC = () => {
     const clockInterval = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(clockInterval);
   }, []);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [machinesRes, tasksRes] = await Promise.all([
+          apiClient.getMachines(),
+          apiClient.getTasks(1, 100)
+        ]);
+
+        if (machinesRes.success && machinesRes.data) {
+          const machinesList = Array.isArray(machinesRes.data) ? machinesRes.data : (machinesRes.data.data || []);
+          setMachines(machinesList);
+        }
+
+        if (tasksRes.success && tasksRes.data) {
+          const tasksList = Array.isArray(tasksRes.data) ? tasksRes.data : (tasksRes.data.data || []);
+          setTasks(tasksList);
+        }
+      } catch (err) {
+        console.error('Error fetching data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    // Refresh data every 10 seconds for real-time updates
+    const refreshInterval = setInterval(fetchData, 10000);
+    return () => clearInterval(refreshInterval);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="h-screen bg-slate-950 text-white flex items-center justify-center">
+        <div className="text-center space-y-6">
+          <Loader size={64} className="text-blue-600 animate-spin mx-auto" />
+          <p className="text-2xl font-black uppercase tracking-widest text-slate-500">Memuat Data Manufaktur...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-slate-950 text-white p-6 lg:p-10 flex flex-col overflow-hidden font-sans">
@@ -45,8 +115,8 @@ export const TvDisplay: React.FC = () => {
       {/* Main Grid - Fully Responsive */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 overflow-hidden">
         {filteredMachines.map(m => {
-            const activeTask = tasks.find(t => t.machineId === m.id && (t.status === 'IN_PROGRESS' || t.status === 'DOWNTIME'));
-            const progress = activeTask ? (activeTask.completedQty / activeTask.targetQty) * 100 : 0;
+            const activeTask = tasks.find(t => t.machine_id === m.id && (t.status === 'IN_PROGRESS' || t.status === 'DOWNTIME'));
+            const progress = activeTask ? (activeTask.completed_qty / activeTask.target_qty) * 100 : 0;
             
             return (
                 <div key={m.id} className={`group relative rounded-[48px] p-8 lg:p-10 flex flex-col shadow-2xl transition-all duration-700 h-full border-t-8 border-l-8 ${
@@ -76,17 +146,17 @@ export const TvDisplay: React.FC = () => {
                         <div className="flex-1 flex flex-col">
                             <div className="space-y-4 flex-1">
                                 <p className="text-slate-500 font-black text-[9px] uppercase tracking-[0.3em] flex items-center gap-2"><Layers size={14}/> PROCESSING JOB</p>
-                                <h3 className="text-2xl font-black leading-tight text-white mb-4 pr-6 line-clamp-2">{activeTask.itemName}</h3>
+                                <h3 className="text-2xl font-black leading-tight text-white mb-4 pr-6 line-clamp-2">{activeTask.item_name}</h3>
                                 <div className="flex gap-4">
-                                   <span className="text-[9px] font-black bg-slate-800/80 text-blue-400 px-3 py-1.5 rounded-xl uppercase border border-slate-700/50">{activeTask.projectName}</span>
+                                   <span className="text-[9px] font-black bg-slate-800/80 text-blue-400 px-3 py-1.5 rounded-xl uppercase border border-slate-700/50">{activeTask.project_name}</span>
                                 </div>
                             </div>
-                            
+
                             <div className="mt-auto space-y-6 bg-slate-950/40 p-6 lg:p-8 rounded-[32px] border border-slate-800/50">
                                 <div className="flex justify-between items-end">
                                     <div className="space-y-2">
                                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><Box size={12}/> OUTPUT</p>
-                                       <p className="text-5xl font-black leading-none tabular-nums text-white">{activeTask.completedQty}<span className="text-lg text-slate-700 ml-2">/ {activeTask.targetQty}</span></p>
+                                       <p className="text-5xl font-black leading-none tabular-nums text-white">{activeTask.completed_qty}<span className="text-lg text-slate-700 ml-2">/ {activeTask.target_qty}</span></p>
                                     </div>
                                     <div className="text-right">
                                        <div className="flex items-center gap-1 text-emerald-400 font-black text-4xl tabular-nums">
