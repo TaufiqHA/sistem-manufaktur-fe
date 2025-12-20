@@ -600,6 +600,9 @@ export const ProjectDetail: React.FC = () => {
           // Only create tasks for steps that are NEW (not in previous workflow)
           const newSteps = selectedWorkflow.filter(step => !previousWorkflow.some(prev => prev.step === step.step));
 
+          // Collect all task creation promises
+          const taskPromises: Promise<any>[] = [];
+
           for (const workflowStep of newSteps) {
             // Process each machine in the machineIds array
             for (const machineId of workflowStep.machineIds) {
@@ -653,10 +656,15 @@ export const ProjectDetail: React.FC = () => {
                       status: isAccessible ? 'PENDING' : 'LOCKED'
                     };
 
-                    const taskResponse = await apiClient.createTask(taskPayload);
-                    if (taskResponse.success && taskResponse.data) {
-                      setApiTasks(prev => [...prev, taskResponse.data]);
-                    }
+                    // Add task creation promise to the collection
+                    taskPromises.push(
+                      apiClient.createTask(taskPayload).then(taskResponse => {
+                        if (taskResponse.success && taskResponse.data) {
+                          setApiTasks(prev => [...prev, taskResponse.data]);
+                        }
+                        return taskResponse;
+                      })
+                    );
                   }
                 }
               } catch (taskErr) {
@@ -664,11 +672,19 @@ export const ProjectDetail: React.FC = () => {
               }
             }
           }
+
+          // Wait for all task creation API calls to complete
+          if (taskPromises.length > 0) {
+            await Promise.allSettled(taskPromises);
+          }
         }
 
         setIsConfigModalOpen(null);
         setSelectedMachineByStep({});
         setError(null);
+
+        // Reload the page after all API calls complete
+        window.location.reload();
       } else {
         setError(response.message || 'Gagal menyimpan alur produksi');
       }
