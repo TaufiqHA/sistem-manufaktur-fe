@@ -1221,11 +1221,33 @@ export const ProjectDetail: React.FC = () => {
                                <input
                                  type="checkbox"
                                  checked={isSelected}
-                                 onChange={(e) => {
+                                 onChange={async (e) => {
                                    if (e.target.checked) {
                                      setWorkflowConfig(prev => [...prev, { step: s.step, sequence: sIdx + 1, machineIds: [] }]);
                                    } else {
+                                     // Remove step from config
                                      setWorkflowConfig(prev => prev.filter(f => f.step !== s.step));
+
+                                     // Delete all tasks for this step
+                                     setIsSaving(true);
+                                     try {
+                                       const itemIdStr = String(isConfigModalOpen);
+                                       const tasksToDelete = apiTasks.filter(t => t.step === s.step && String(t.item_id) === itemIdStr);
+
+                                       for (const task of tasksToDelete) {
+                                         const response = await apiClient.deleteTask(task.id!);
+                                         if (!response.success) {
+                                           console.error('Failed to delete task:', task.id, response.message);
+                                         }
+                                       }
+
+                                       setApiTasks(prev => prev.filter(t => !(t.step === s.step && String(t.item_id) === itemIdStr)));
+                                     } catch (err) {
+                                       setError('Terjadi kesalahan saat menghapus tugas');
+                                       console.error('Error deleting tasks:', err);
+                                     } finally {
+                                       setIsSaving(false);
+                                     }
                                    }
                                  }}
                                  className="w-5 h-5 rounded-lg cursor-pointer accent-blue-600"
@@ -1322,11 +1344,42 @@ export const ProjectDetail: React.FC = () => {
                         <input
                           type="checkbox"
                           checked={isChecked}
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             if (e.target.checked) {
                               setWorkflowConfig(prev => prev.map(f => f.step === isMachineModalOpen ? {...f, machineIds: [...(f.machineIds || []), String(m.id)]} : f));
                             } else {
+                              // Remove machine from config
                               setWorkflowConfig(prev => prev.map(f => f.step === isMachineModalOpen ? {...f, machineIds: (f.machineIds || []).filter(id => String(id) !== String(m.id))} : f));
+
+                              // Delete all tasks for this item, step, and machine combination
+                              setIsSaving(true);
+                              try {
+                                const itemIdStr = String(isConfigModalOpen);
+                                const machineIdStr = String(m.id);
+                                const tasksToDelete = apiTasks.filter(t =>
+                                  t.step === isMachineModalOpen &&
+                                  String(t.item_id) === itemIdStr &&
+                                  String(t.machine_id) === machineIdStr
+                                );
+
+                                for (const task of tasksToDelete) {
+                                  const response = await apiClient.deleteTask(task.id!);
+                                  if (!response.success) {
+                                    console.error('Failed to delete task:', task.id, response.message);
+                                  }
+                                }
+
+                                setApiTasks(prev => prev.filter(t => !(
+                                  t.step === isMachineModalOpen &&
+                                  String(t.item_id) === itemIdStr &&
+                                  String(t.machine_id) === machineIdStr
+                                )));
+                              } catch (err) {
+                                setError('Terjadi kesalahan saat menghapus tugas');
+                                console.error('Error deleting tasks:', err);
+                              } finally {
+                                setIsSaving(false);
+                              }
                             }
                           }}
                           className="w-5 h-5 rounded cursor-pointer accent-blue-600"
