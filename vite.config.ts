@@ -13,7 +13,6 @@ export default defineConfig(({ mode }) => {
           target: "https://api.manufactur.id",
           changeOrigin: true,
           secure: true,
-          rewrite: (path) => path.replace(/^\/api/, "/api"),
         },
       },
     },
