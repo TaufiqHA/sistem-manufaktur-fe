@@ -24,6 +24,20 @@ export const Materials: React.FC = () => {
 
   if (!can('view', 'MATERIALS')) return <div className="p-8 text-center text-slate-500 font-bold">Akses Ditolak.</div>;
 
+  const generateSKU = (category: string = 'RAW') => {
+    const categoryAbbreviations: { [key: string]: string } = {
+      RAW: 'RAW',
+      FINISHING: 'FIN',
+      HARDWARE: 'HW',
+    };
+
+    const categoryAbbr = categoryAbbreviations[category] || 'GEN';
+    const materialsWithCategory = materials.filter(m => m.category === category);
+    const nextNumber = materialsWithCategory.length + 1;
+    const paddedNumber = String(nextNumber).padStart(3, '0');
+    return `${categoryAbbr}-${paddedNumber}`;
+  };
+
   const initialFormState: Partial<MaterialData> = {
     code: '', name: '', unit: 'PCS', current_stock: 0, safety_stock: 0, price_per_unit: 0, category: 'RAW'
   };
@@ -126,7 +140,7 @@ export const Materials: React.FC = () => {
             <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Inventory Material</h1>
             <p className="text-slate-500 font-bold">Monitor ketersediaan stok bahan baku manufaktur</p>
          </div>
-         <button onClick={() => { setEditingId(null); setFormData(initialFormState); setIsModalOpen(true); }} className="bg-slate-900 text-white px-8 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl">+ TAMBAH MATERIAL</button>
+         <button onClick={() => { setEditingId(null); setFormData({ ...initialFormState, code: generateSKU('RAW') }); setIsModalOpen(true); }} className="bg-slate-900 text-white px-8 py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl">+ TAMBAH MATERIAL</button>
       </div>
 
       <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
@@ -202,11 +216,18 @@ export const Materials: React.FC = () => {
                  <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-2">
                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SKU / Kode Unik</label>
-                       <input required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black uppercase outline-none focus:border-blue-500" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} />
+                       <input disabled className="w-full p-4 bg-slate-100 border border-slate-200 rounded-2xl font-black uppercase outline-none cursor-not-allowed text-slate-600" value={formData.code} />
                     </div>
                     <div className="space-y-2">
                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kategori Material</label>
-                       <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value as any})}>
+                       <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none" value={formData.category} onChange={e => {
+                         const newCategory = e.target.value;
+                         const updatedFormData = { ...formData, category: newCategory as any };
+                         if (!editingId) {
+                           updatedFormData.code = generateSKU(newCategory);
+                         }
+                         setFormData(updatedFormData);
+                       }}>
                          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                        </select>
                     </div>

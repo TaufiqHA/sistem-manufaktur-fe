@@ -129,6 +129,24 @@ export const Machines: React.FC = () => {
     }
   };
 
+  const generateMachineCode = (type: string = 'POTONG') => {
+    const typeAbbreviations: { [key: string]: string } = {
+      POTONG: 'POT',
+      PLONG: 'PLG',
+      PRESS: 'PRS',
+      LAS: 'LAS',
+      WT: 'WT',
+      POWDER: 'PWD',
+      QC: 'QC',
+    };
+
+    const typeAbbr = typeAbbreviations[type] || 'GEN';
+    const machinesWithType = machines.filter(m => m.type === type);
+    const nextNumber = machinesWithType.length + 1;
+    const paddedNumber = String(nextNumber).padStart(3, '0');
+    return `${typeAbbr}-${paddedNumber}`;
+  };
+
   const handleOpenEdit = (m: FormMachine) => {
     setEditingId(m.id || null);
     setFormData({
@@ -189,7 +207,7 @@ export const Machines: React.FC = () => {
           onClick={() => {
             setEditingId(null);
             setFormData({
-              code: '',
+              code: generateMachineCode(),
               name: '',
               type: 'POTONG',
               capacity_per_hour: 0,
@@ -390,11 +408,9 @@ export const Machines: React.FC = () => {
                     Kode Unit / Mesin
                   </label>
                   <input
-                    required
-                    className="w-full p-4 bg-slate-50 rounded-2xl font-black uppercase outline-none focus:ring-2 focus:ring-blue-100"
-                    placeholder="e.g. LAS-001"
+                    disabled
+                    className="w-full p-4 bg-slate-100 rounded-2xl font-black uppercase outline-none cursor-not-allowed text-slate-600"
                     value={formData.code}
-                    onChange={e => setFormData({ ...formData, code: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -416,12 +432,14 @@ export const Machines: React.FC = () => {
                   <select
                     className="w-full p-4 bg-slate-50 rounded-2xl font-black outline-none"
                     value={formData.type}
-                    onChange={e =>
-                      setFormData({
-                        ...formData,
-                        type: e.target.value as 'POTONG' | 'PLONG' | 'PRESS' | 'LAS' | 'WT' | 'POWDER' | 'QC',
-                      })
-                    }
+                    onChange={e => {
+                      const newType = e.target.value as 'POTONG' | 'PLONG' | 'PRESS' | 'LAS' | 'WT' | 'POWDER' | 'QC';
+                      const updatedFormData = { ...formData, type: newType };
+                      if (!editingId) {
+                        updatedFormData.code = generateMachineCode(newType);
+                      }
+                      setFormData(updatedFormData);
+                    }}
                   >
                     {ALL_STEPS.map(s => (
                       <option key={s} value={s}>
