@@ -34,7 +34,7 @@ export const ALL_STEPS: ProcessStep[] = ['POTONG', 'PLONG', 'PRESS', 'LASPEN', '
 export interface ItemStepConfig {
   step: ProcessStep;
   sequence: number;
-  machineId: string;
+  machineIds: string[];
 }
 
 export interface BomItem {

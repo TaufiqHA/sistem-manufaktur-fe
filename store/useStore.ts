@@ -127,20 +127,22 @@ export const useStore = create<AppState>((set, get) => ({
 
     const newTasks: Task[] = [];
     workflow.forEach(step => {
-      if (step.machineId) {
-        newTasks.push({
-          id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          projectId: project.id,
-          projectName: project.name,
-          itemId: item.id,
-          itemName: item.name,
-          step: step.step,
-          machineId: step.machineId,
-          targetQty: item.quantity,
-          completedQty: 0,
-          defectQty: 0,
-          status: 'PENDING',
-          totalDowntimeMinutes: 0
+      if (step.machineIds && step.machineIds.length > 0) {
+        step.machineIds.forEach(machineId => {
+          newTasks.push({
+            id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            projectId: project.id,
+            projectName: project.name,
+            itemId: item.id,
+            itemName: item.name,
+            step: step.step,
+            machineId: machineId,
+            targetQty: item.quantity,
+            completedQty: 0,
+            defectQty: 0,
+            status: 'PENDING',
+            totalDowntimeMinutes: 0
+          });
         });
       }
     });

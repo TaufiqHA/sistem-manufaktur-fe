@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://api.manufactur.id/api";
+const API_BASE_URL = "http://localhost:8000/api";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -511,7 +511,7 @@ class ApiClient {
       if (response.status === 204) {
         return {
           success: true,
-          message: 'Success',
+          message: "Success",
           data: undefined as any,
         };
       }
