@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:8000/api";
+const API_BASE_URL = "/api";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -506,6 +506,15 @@ class ApiClient {
 
     try {
       const response = await fetch(url, options);
+
+      // Handle 204 No Content (successful DELETE responses)
+      if (response.status === 204) {
+        return {
+          success: true,
+          message: 'Success',
+          data: undefined as any,
+        };
+      }
 
       // Check if response is JSON
       const contentType = response.headers.get("content-type");

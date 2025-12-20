@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { apiClient } from '../lib/api';
 import { Plus, Edit3, Trash2, Wrench, X, Users as UsersIcon, ChevronLeft, ChevronRight, Search, Settings2, AlertTriangle, CheckCircle2, User as UserIcon, AlertCircle, Loader } from 'lucide-react';
 import { Machine, ALL_STEPS, Shift } from '../types';
+import { ErrorPopup } from '../components/ErrorPopup';
 
 interface FormMachine {
   id?: number;
@@ -555,6 +556,8 @@ export const Machines: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ErrorPopup message={error} onClose={() => setError(null)} />
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { apiClient, ProjectData, ProjectItemData, MaterialData, BomItemData, TaskData, TasksListResponse } from '../lib/api';
+import { ErrorPopup } from '../components/ErrorPopup';
 import {
   Plus, Trash2, Lock, Unlock, X, Box, CheckCircle, CheckCircle2, Calendar, Clock, Layers, TrendingUp, ArrowRight, Settings2, Info, LayoutList, RefreshCcw, Save, Search, Hammer, ChevronRight, Activity, AlertTriangle
 } from 'lucide-react';
@@ -105,22 +106,23 @@ export const ProjectDetail: React.FC = () => {
     fetchProjectAndItems();
   }, [id]);
 
+  const fetchBomMaterials = async () => {
+    setBomMaterialsLoading(true);
+    try {
+      const response = await apiClient.getMaterials(1, 100);
+      if (response.success && response.data?.data) {
+        setBomMaterials(response.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch materials:', err);
+    } finally {
+      setBomMaterialsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isBomModalOpen) {
-      const fetchMaterials = async () => {
-        setBomMaterialsLoading(true);
-        try {
-          const response = await apiClient.getMaterials(1, 100);
-          if (response.success && response.data?.data) {
-            setBomMaterials(response.data.data);
-          }
-        } catch (err) {
-          console.error('Failed to fetch materials:', err);
-        } finally {
-          setBomMaterialsLoading(false);
-        }
-      };
-      fetchMaterials();
+      fetchBomMaterials();
     }
   }, [isBomModalOpen]);
 
@@ -271,9 +273,75 @@ export const ProjectDetail: React.FC = () => {
   const handleUpdateTaskQuantities = async (taskId: string | number, completedQty: number, defectQty: number) => {
     setIsSaving(true);
     try {
+      // Get the current task to find which item and step it belongs to
+      const currentTask = apiTasks.find(t => t.id === taskId);
+      if (!currentTask) {
+        setError('Tugas tidak ditemukan');
+        setIsSaving(false);
+        return;
+      }
+
       const response = await apiClient.updateTaskQuantities(taskId, completedQty, defectQty);
       if (response.success && response.data) {
         setApiTasks(apiTasks.map(t => t.id === taskId ? response.data : t));
+
+        // If this is the PACKING (final/finishing) step, automatically reduce material stock and update realisasi
+        if (currentTask.step === 'PACKING' && completedQty > (currentTask.completed_qty || 0)) {
+          const completedQuantityDifference = completedQty - (currentTask.completed_qty || 0);
+          console.log('Reducing stock for item:', currentTask.item_id, 'Quantity difference:', completedQuantityDifference);
+
+          // Get the BOM items for this product item - fetch fresh if not in cache
+          let bomItems = bomItemsByItemId[currentTask.item_id] || [];
+
+          // If BOM items not cached, fetch them
+          if (bomItems.length === 0) {
+            try {
+              const bomResponse = await apiClient.getBomItemsByProjectItem(currentTask.item_id);
+              if (bomResponse.success && bomResponse.data) {
+                bomItems = Array.isArray(bomResponse.data) ? bomResponse.data : (bomResponse.data.data || []);
+                console.log('Fetched BOM items for item', currentTask.item_id, ':', bomItems);
+              }
+            } catch (err) {
+              console.error('Error fetching BOM items:', err);
+            }
+          }
+          console.log('BOM Items for item', currentTask.item_id, ':', bomItems);
+
+          if (bomItems.length === 0) {
+            console.warn('No BOM items found for item:', currentTask.item_id);
+          }
+
+          // Reduce stock for each material based on the quantity completed
+          for (const bomItem of bomItems) {
+            if (bomItem.material_id && bomItem.id) {
+              const quantityToReduce = completedQuantityDifference * (bomItem.quantity_per_unit || 0);
+              console.log('Reducing material:', bomItem.material_id, 'by quantity:', quantityToReduce);
+
+              try {
+                const stockResponse = await apiClient.updateMaterialStock(
+                  bomItem.material_id,
+                  quantityToReduce,
+                  'reduce'
+                );
+                console.log('Stock update response:', stockResponse);
+
+                if (stockResponse.success) {
+                  // Also update BOM item's realized quantity
+                  const newRealized = (bomItem.realized || 0) + quantityToReduce;
+                  const bomUpdateResponse = await apiClient.updateBomItem(bomItem.id, {
+                    realized: newRealized
+                  });
+                  console.log('BOM item realized update response:', bomUpdateResponse);
+                } else {
+                  console.error(`Failed to reduce stock for material ${bomItem.material_id}:`, stockResponse.message);
+                }
+              } catch (err) {
+                console.error(`Error reducing stock for material ${bomItem.material_id}:`, err);
+                // Don't fail the whole operation if one material stock update fails
+              }
+            }
+          }
+        }
       } else {
         setError(response.message || 'Gagal mengubah kuantitas tugas');
       }
@@ -460,25 +528,31 @@ export const ProjectDetail: React.FC = () => {
   };
 
   const startWorkflowConfig = (item: any) => {
-    setWorkflowConfig(item.workflow?.length > 0 ? item.workflow : ALL_STEPS.map((s, idx) => ({ step: s, sequence: idx + 1, machineId: '' })));
+    setWorkflowConfig(item.workflow?.length > 0 ? item.workflow : []);
     setIsConfigModalOpen(item.id);
   };
 
   const handleSaveWorkflow = async () => {
     if (!isConfigModalOpen) return;
 
-    // Validate that all steps have a machine assigned
-    if (workflowConfig.some(s => !s.machineId)) {
-      setError('Semua tahapan proses harus memiliki mesin yang ditugaskan');
+    // Filter out unselected steps (those without machine)
+    const selectedWorkflow = workflowConfig.filter(s => s.machineId);
+
+    if (selectedWorkflow.length === 0) {
+      setError('Pilih minimal satu tahapan dengan mesin yang ditugaskan');
       return;
     }
 
     setIsSaving(true);
     try {
+      // Get the current item to check previous workflow
+      const item = projectItems.find(i => i.id === isConfigModalOpen);
+      const previousWorkflow = item?.workflow || [];
+
       // Call API to update the project item with workflow configuration
       const response = await apiClient.updateProjectItem(isConfigModalOpen, {
         is_workflow_locked: true,
-        workflow: workflowConfig
+        workflow: selectedWorkflow
       });
 
       if (response.success && response.data) {
@@ -486,10 +560,9 @@ export const ProjectDetail: React.FC = () => {
         setProjectItems(projectItems.map(i => i.id === isConfigModalOpen ? response.data : i));
 
         // Create tasks from the workflow
-        validateWorkflow(isConfigModalOpen.toString(), workflowConfig);
+        validateWorkflow(isConfigModalOpen.toString(), selectedWorkflow);
 
-        // Auto-create tasks via API for each workflow step
-        const item = projectItems.find(i => i.id === isConfigModalOpen);
+        // Auto-create tasks via API only for NEW workflow steps (not previously configured)
         if (item && project) {
           // Calculate days until deadline
           const today = new Date();
@@ -498,7 +571,10 @@ export const ProjectDetail: React.FC = () => {
           deadline.setHours(0, 0, 0, 0);
           const daysUntilDeadline = Math.max(1, Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
 
-          for (const workflowStep of workflowConfig) {
+          // Only create tasks for steps that are NEW (not in previous workflow)
+          const newSteps = selectedWorkflow.filter(step => !previousWorkflow.some(prev => prev.step === step.step));
+
+          for (const workflowStep of newSteps) {
             try {
               // Get machine details to determine shifts
               const machineResponse = await apiClient.getMachine(workflowStep.machineId);
@@ -590,9 +666,9 @@ export const ProjectDetail: React.FC = () => {
                 <p className="font-black text-slate-700 text-xl">{project.total_qty} {project.unit}</p>
             </div>
             <div className="bg-emerald-50 px-6 py-3 rounded-[24px] border border-emerald-100">
-                <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-1">Produk Selesai (QC)</p>
+                <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-1">Produk Selesai (PACKING)</p>
                 <p className="font-black text-emerald-600 text-xl">
-                  {projectTasks.filter(t => t.step === 'QC').reduce((acc, t) => acc + (t.completedQty || t.completed_qty || 0), 0)} {project.unit}
+                  {projectTasks.filter(t => t.step === 'PACKING').reduce((acc, t) => acc + (t.completedQty || t.completed_qty || 0), 0)} {project.unit}
                 </p>
             </div>
           </div>
@@ -636,7 +712,7 @@ export const ProjectDetail: React.FC = () => {
           </div>
 
           {projectItems.map((item, idx) => {
-            const completedQtyAtQC = mergedTasks.filter(t => (t.itemId || t.item_id) === item.id && t.step === 'QC').reduce((acc, t) => acc + (t.completedQty || t.completed_qty || 0), 0);
+            const completedQtyAtQC = mergedTasks.filter(t => (t.itemId || t.item_id) === item.id && t.step === 'PACKING').reduce((acc, t) => acc + (t.completedQty || t.completed_qty || 0), 0);
             const itemTotalSteps = ALL_STEPS.length;
             const itemOverallProgress = item.quantity > 0 ? Math.round((mergedTasks.filter(t => (t.itemId || t.item_id) === item.id && t.status === 'COMPLETED').length / (item.workflow.length || 1)) * 100) : 0;
 
@@ -675,10 +751,8 @@ export const ProjectDetail: React.FC = () => {
                     <div className="flex gap-3 ml-4">
                       {!item.is_bom_locked ? (
                         <button onClick={() => setIsBomModalOpen(item.id!.toString())} className="bg-amber-500 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-amber-600 transition-all flex items-center gap-2"><Hammer size={16}/> Kelola BOM</button>
-                      ) : !item.is_workflow_locked ? (
-                        <button onClick={() => startWorkflowConfig(item)} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2"><Settings2 size={16}/> Set Alur Mesin</button>
                       ) : (
-                        <div className="bg-emerald-100 text-emerald-600 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2"><CheckCircle size={16}/> Item Valid</div>
+                        <button onClick={() => startWorkflowConfig(item)} className={`px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg transition-all flex items-center gap-2 ${item.is_workflow_locked ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}><Settings2 size={16}/> {item.is_workflow_locked ? 'Edit Alur' : 'Set Alur Mesin'}</button>
                       )}
                       <button onClick={() => handleDeleteItem(item.id!)} disabled={isSaving} className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all disabled:opacity-50"><Trash2 size={20}/></button>
                     </div>
@@ -715,11 +789,11 @@ export const ProjectDetail: React.FC = () => {
                         <table className="w-full text-xs text-left">
                            <thead className="bg-slate-50 text-slate-400 font-black uppercase tracking-widest">
                              <tr>
-                               <th className="px-6 py-4">Bahan Baku</th>
-                               <th className="px-6 py-4 text-center">Satuan / Unit</th>
-                               <th className="px-6 py-4 text-center">Total Kebutuhan</th>
-                               <th className="px-6 py-4 text-center text-emerald-600">Realisasi (POTONG)</th>
-                               {!item.isBomLocked && <th className="px-6 py-4 text-right">Aksi</th>}
+                              <th className="px-6 py-4">Bahan Baku</th>
+                              <th className="px-6 py-4 text-center">Satuan / Unit</th>
+                              <th className="px-6 py-4 text-center">Total Kebutuhan</th>
+                              <th className="px-6 py-4 text-center text-emerald-600">Realisasi</th>
+                              {!item.isBomLocked && <th className="px-6 py-4 text-right">Aksi</th>}
                              </tr>
                            </thead>
                            <tbody className="divide-y divide-slate-50 font-bold text-slate-700">
@@ -1094,10 +1168,12 @@ export const ProjectDetail: React.FC = () => {
                <div className="flex-1 overflow-y-auto p-12 space-y-8 bg-white">
                   <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6">
                     <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest">ℹ️ Alur Proses Manufaktur</p>
-                    <p className="text-sm font-black text-slate-700 mt-2">Semua 8 tahapan adalah wajib. Pilih mesin mana yang akan menangani setiap tahapan.</p>
+                    <p className="text-sm font-black text-slate-700 mt-2">Pilih tahapan yang diperlukan dan tentukan mesin untuk setiap tahapan. Hanya tahapan yang dipilih yang akan menjadi wajib.</p>
                   </div>
 
-                  {workflowConfig.map((s, sIdx) => {
+                  {ALL_STEPS.map((step, sIdx) => {
+                    const isSelected = workflowConfig.some(w => w.step === step);
+                    const s = workflowConfig.find(w => w.step === step) || { step: step as ProcessStep, sequence: sIdx + 1, machineId: '' };
                     const stepTasks = projectFilteredTasks.filter(t => t.step === s.step);
                     const stepTotal = stepTasks.reduce((acc, t) => acc + (t.target_qty || t.targetQty || 0), 0);
                     const stepCompleted = stepTasks.reduce((acc, t) => acc + (t.completed_qty || t.completedQty || 0), 0);
@@ -1105,18 +1181,32 @@ export const ProjectDetail: React.FC = () => {
                     const assignedMachine = apiMachines.find(m => m.id === s.machineId);
 
                     return (
-                      <div key={s.step} className="p-8 rounded-[32px] border-2 border-slate-100 bg-white space-y-6">
+                      <div key={s.step} className={`p-8 rounded-[32px] border-2 space-y-6 transition-all ${isSelected ? 'border-slate-100 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
                         <div className="flex items-center justify-between">
                            <div className="flex items-center gap-6 flex-1">
-                             <div className="w-16 h-16 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-2xl flex-shrink-0">
-                               {sIdx + 1}
-                             </div>
-                             <div>
-                               <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{s.step}</h3>
-                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tahapan Produksi {sIdx + 1} dari {ALL_STEPS.length}</p>
-                             </div>
+                             <label className="flex items-center gap-4 cursor-pointer flex-1">
+                               <input
+                                 type="checkbox"
+                                 checked={isSelected}
+                                 onChange={(e) => {
+                                   if (e.target.checked) {
+                                     setWorkflowConfig(prev => [...prev, { step: s.step, sequence: sIdx + 1, machineId: '' }]);
+                                   } else {
+                                     setWorkflowConfig(prev => prev.filter(f => f.step !== s.step));
+                                   }
+                                 }}
+                                 className="w-5 h-5 rounded-lg cursor-pointer accent-blue-600"
+                               />
+                               <div className="w-16 h-16 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black text-2xl flex-shrink-0">
+                                 {sIdx + 1}
+                               </div>
+                               <div>
+                                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{s.step}</h3>
+                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tahapan Produksi {sIdx + 1} dari {ALL_STEPS.length}</p>
+                               </div>
+                             </label>
                            </div>
-                           {stepTasks.length > 0 && (
+                           {isSelected && stepTasks.length > 0 && (
                              <div className="text-right">
                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">Progress</p>
                                <div className="flex items-center gap-3">
@@ -1129,33 +1219,35 @@ export const ProjectDetail: React.FC = () => {
                            )}
                         </div>
 
-                        <div className="space-y-3">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pilih Mesin Pelaksana</label>
-                           <select
-                             disabled={machinesLoading}
-                             className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 disabled:opacity-50 text-slate-900"
-                             value={s.machineId}
-                             onChange={e => setWorkflowConfig(prev => prev.map(f => f.step === s.step ? {...f, machineId: e.target.value} : f))}
-                           >
-                              <option value="">{machinesLoading ? 'Memuat mesin...' : '- Pilih Mesin -'}</option>
-                              {apiMachines
-                                .filter(m => m.type === s.step)
-                                .map(m => (
-                                  <option key={m.id} value={m.id}>
-                                    {m.name} ({m.status})
-                                  </option>
-                                ))
-                              }
-                           </select>
-                           {assignedMachine && (
-                             <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 mt-3">
-                               <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">✓ Mesin Dipilih</p>
-                               <p className="text-sm font-black text-emerald-700 mt-1">{assignedMachine.name}</p>
-                             </div>
-                           )}
-                        </div>
+                        {isSelected && (
+                          <div className="space-y-3">
+                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pilih Mesin Pelaksana</label>
+                             <select
+                               disabled={machinesLoading}
+                               className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 disabled:opacity-50 text-slate-900"
+                               value={s.machineId}
+                               onChange={e => setWorkflowConfig(prev => prev.map(f => f.step === s.step ? {...f, machineId: e.target.value} : f))}
+                             >
+                                <option value="">{machinesLoading ? 'Memuat mesin...' : '- Pilih Mesin -'}</option>
+                                {apiMachines
+                                  .filter(m => m.type === s.step)
+                                  .map(m => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.name} ({m.status})
+                                    </option>
+                                  ))
+                                }
+                             </select>
+                             {assignedMachine && (
+                               <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 mt-3">
+                                 <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">✓ Mesin Dipilih</p>
+                                 <p className="text-sm font-black text-emerald-700 mt-1">{assignedMachine.name}</p>
+                               </div>
+                             )}
+                          </div>
+                        )}
 
-                        {stepTasks.length > 0 && (
+                        {isSelected && stepTasks.length > 0 && (
                            <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl space-y-4 mt-4">
                              <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">📊 Status Progress Tahap</p>
                              <div className="grid grid-cols-4 gap-4">
@@ -1184,28 +1276,8 @@ export const ProjectDetail: React.FC = () => {
                </div>
 
                <div className="p-10 border-t bg-slate-50 space-y-8">
-                  <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 space-y-4">
-                    <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest">📅 Distribusi Tugas Per Hari</p>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <p className="text-[8px] font-bold text-slate-500 uppercase">Total Hari</p>
-                        <p className="text-lg font-black text-blue-600">{daysLeft + 1}</p>
-                      </div>
-                      <div>
-                        <p className="text-[8px] font-bold text-slate-500 uppercase">Mulai</p>
-                        <p className="text-sm font-black text-slate-800">{new Date().toLocaleDateString('id-ID', {day: '2-digit', month: 'short'})}</p>
-                      </div>
-                      <div>
-                        <p className="text-[8px] font-bold text-slate-500 uppercase">Deadline</p>
-                        <p className="text-sm font-black text-slate-800">{new Date(project?.deadline || '').toLocaleDateString('id-ID', {day: '2-digit', month: 'short'})}</p>
-                      </div>
-                    </div>
-                    <div className="bg-blue-100 border border-blue-200 rounded-xl p-4 text-[9px] font-bold text-blue-700 uppercase tracking-widest">
-                      ⚠️ Hanya tugas untuk HARI INI yang bisa diakses. Tugas untuk hari depan akan otomatis tersedia sesuai jadwalnya.
-                    </div>
-                  </div>
                   <div className="flex justify-end items-center">
-                    <button onClick={handleSaveWorkflow} disabled={isSaving || workflowConfig.some(s => !s.machineId)} title={workflowConfig.some(s => !s.machineId) ? 'Silakan pilih mesin untuk semua tahapan' : ''} className="bg-blue-600 text-white px-16 py-6 rounded-[32px] font-black text-lg shadow-2xl uppercase tracking-widest flex items-center gap-4 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"><Save size={24}/> {isSaving ? 'MENYIMPAN...' : 'VALIDASI & SIMPAN ALUR'}</button>
+                    <button onClick={handleSaveWorkflow} disabled={isSaving || workflowConfig.filter(s => s.machineId).length === 0} title={workflowConfig.filter(s => s.machineId).length === 0 ? 'Pilih minimal satu tahapan dengan mesin' : ''} className="bg-blue-600 text-white px-16 py-6 rounded-[32px] font-black text-lg shadow-2xl uppercase tracking-widest flex items-center gap-4 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"><Save size={24}/> {isSaving ? 'MENYIMPAN...' : 'VALIDASI & SIMPAN ALUR'}</button>
                   </div>
                </div>
             </div>
@@ -1227,20 +1299,30 @@ export const ProjectDetail: React.FC = () => {
                     return;
                   }
 
+                  const qtyPerUnit = parseFloat(newBom.qty.toString());
+                  const totalRequired = (item.quantity || 0) * qtyPerUnit;
+
                   const bomPayload = {
                     item_id: isBomModalOpen!,
                     material_id: newBom.materialId,
-                    quantity_per_unit: parseFloat(newBom.qty.toString()),
-                    total_required: parseFloat(((item.quantity || 0) * newBom.qty).toString()),
+                    quantity_per_unit: Math.round(qtyPerUnit * 100) / 100,
+                    total_required: Math.round(totalRequired * 100) / 100,
                     allocated: 0,
                     realized: 0
                   };
 
                   const response = await apiClient.createBomItem(bomPayload);
                   if (response.success && response.data) {
+                    const bomItemData = response.data;
+                    const selectedMaterial = bomMaterials.find(m => m.id?.toString() === newBom.materialId);
+
+                    if (selectedMaterial && !bomItemData.material) {
+                      bomItemData.material = selectedMaterial;
+                    }
+
                     setBomItemsByItemId(prev => ({
                       ...prev,
-                      [isBomModalOpen!]: [...(prev[isBomModalOpen!] || []), response.data]
+                      [isBomModalOpen!]: [...(prev[isBomModalOpen!] || []), bomItemData]
                     }));
                     setNewBom({ materialId: '', qty: 1.0 });
                     setIsBomModalOpen(null);
@@ -1344,7 +1426,7 @@ export const ProjectDetail: React.FC = () => {
                   <option value="LAS">LAS</option>
                   <option value="WT">WT</option>
                   <option value="POWDER">POWDER</option>
-                  <option value="QC">QC</option>
+                  <option value="PACKING">PACKING</option>
                 </select>
               </div>
 
@@ -1422,6 +1504,8 @@ export const ProjectDetail: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ErrorPopup message={error} onClose={() => setError(null)} />
     </div>
   );
 };

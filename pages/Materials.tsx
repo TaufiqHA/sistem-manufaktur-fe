@@ -3,9 +3,10 @@ import { useStore } from '../store/useStore';
 import { Plus, Edit3, Trash2, X, Search, ChevronLeft, ChevronRight, Package, Coins, AlertCircle } from 'lucide-react';
 import { Material } from '../types';
 import { apiClient, MaterialData } from '../lib/api';
+import { ErrorPopup } from '../components/ErrorPopup';
 
 const CATEGORIES = ['RAW', 'FINISHING', 'HARDWARE'];
-const UNITS = ['PCS', 'BOX', 'LEMBAR', 'KG', 'METER', 'ROLL', 'SET'];
+const UNITS = ['PCS', 'BOX', 'LEMBAR', 'KG', 'METER', 'ROLL', 'SET', 'LITER'];
 
 export const Materials: React.FC = () => {
   const { can } = useStore();
@@ -69,11 +70,13 @@ export const Materials: React.FC = () => {
 
       if (editingId) {
         await apiClient.updateMaterial(editingId, payload);
+        await fetchMaterials(currentPage);
       } else {
         await apiClient.createMaterial(payload);
+        setCurrentPage(1);
+        await fetchMaterials(1);
       }
 
-      await fetchMaterials(currentPage);
       setIsModalOpen(false);
       setEditingId(null);
       setFormData(initialFormState);
@@ -132,7 +135,6 @@ export const Materials: React.FC = () => {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input type="text" placeholder="Cari material berdasarkan SKU atau Nama..." className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); fetchMaterials(1, e.target.value); }} />
            </div>
-           {error && <p className="text-red-600 font-bold text-sm">{error}</p>}
         </div>
 
         <table className="w-full text-sm text-left">
@@ -253,7 +255,6 @@ export const Materials: React.FC = () => {
                   <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex items-center gap-3 text-amber-700 text-[10px] font-bold uppercase text-left">
                      <AlertCircle size={24}/> Perubahan ini akan langsung mempengaruhi stok gudang saat ini.
                   </div>
-                  {error && <p className="text-red-600 text-center font-bold text-sm">{error}</p>}
                   <div className="flex flex-col gap-3">
                      <button type="submit" disabled={isLoading} className="w-full py-6 bg-emerald-600 text-white rounded-[24px] font-black text-lg shadow-2xl hover:bg-emerald-700 transition-all disabled:opacity-50">{isLoading ? 'MEMPROSES...' : 'EKSEKUSI ADJUSTMENT'}</button>
                      <button type="button" onClick={() => setAdjustModal(null)} className="text-slate-400 font-black uppercase text-[10px] tracking-widest py-2">Batalkan</button>
@@ -262,6 +263,8 @@ export const Materials: React.FC = () => {
             </div>
          </div>
       )}
+
+      <ErrorPopup message={error} onClose={() => setError(null)} />
     </div>
   );
 };

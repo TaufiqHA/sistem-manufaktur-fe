@@ -214,6 +214,56 @@ export const MachineBoard: React.FC = () => {
           // Update Zustand store to sync workflow progress across pages
           reportProduction(reportModal.id, qtyGood, qtyDefect, selectedShift, currentUser?.name || 'Unknown');
 
+          // If this is the PACKING (final/finishing) step, automatically reduce material stock and update realisasi
+          if (reportModal.step === 'PACKING' && qtyGood > 0) {
+            console.log('PACKING step reported. Reducing material stock for item:', reportModal.item_id, 'Quantity:', qtyGood);
+
+            try {
+              // Fetch BOM items for this product item
+              const bomResponse = await apiClient.getBomItemsByProjectItem(reportModal.item_id);
+              let bomItems = [];
+
+              if (bomResponse.success && bomResponse.data) {
+                bomItems = Array.isArray(bomResponse.data) ? bomResponse.data : (bomResponse.data.data || []);
+                console.log('BOM Items for item', reportModal.item_id, ':', bomItems);
+              }
+
+              // Reduce stock for each material based on the quantity completed
+              for (const bomItem of bomItems) {
+                if (bomItem.material_id && bomItem.id) {
+                  const quantityToReduce = qtyGood * (bomItem.quantity_per_unit || 0);
+                  console.log('Reducing material:', bomItem.material_id, 'by quantity:', quantityToReduce);
+
+                  try {
+                    // Update material stock
+                    const stockResponse = await apiClient.updateMaterialStock(
+                      bomItem.material_id,
+                      quantityToReduce,
+                      'reduce'
+                    );
+                    console.log('Stock update response:', stockResponse);
+
+                    if (stockResponse.success) {
+                      // Also update BOM item's realized quantity
+                      const newRealized = (bomItem.realized || 0) + quantityToReduce;
+                      const bomUpdateResponse = await apiClient.updateBomItem(bomItem.id, {
+                        realized: newRealized
+                      });
+                      console.log('BOM item realized update response:', bomUpdateResponse);
+                    } else {
+                      console.error(`Failed to reduce stock for material ${bomItem.material_id}:`, stockResponse.message);
+                    }
+                  } catch (stockErr) {
+                    console.error(`Error reducing stock for material ${bomItem.material_id}:`, stockErr);
+                    // Don't fail the whole operation if one material stock update fails
+                  }
+                }
+              }
+            } catch (bomErr) {
+              console.error('Error processing material stock reduction:', bomErr);
+            }
+          }
+
           // Refetch all tasks for the selected machine to ensure workflow progress is updated
           // This ensures that if user navigates to ProjectDetail, the progress bars are accurate
           try {

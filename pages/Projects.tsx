@@ -6,6 +6,7 @@ import {
   Plus, Search, Eye, Lock, Unlock, X, ChevronLeft, ChevronRight, Calculator, Edit3, Trash2, AlertCircle
 } from 'lucide-react';
 import { Project } from '../types';
+import { ErrorPopup } from '../components/ErrorPopup';
 
 const UNITS_LIST = ['PCS', 'SET', 'UNIT', 'BOX', 'KG', 'LEMBAR', 'ROLL', 'METER'];
 
@@ -315,6 +316,8 @@ export const Projects: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ErrorPopup message={error} onClose={() => setError(null)} />
     </div>
   );
 };
