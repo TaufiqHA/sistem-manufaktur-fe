@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://api.manufactur.id/api";
+const API_BASE_URL = "/api";
 
 interface ApiResponse<T> {
   success: boolean;
