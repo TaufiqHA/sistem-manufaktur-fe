@@ -498,7 +498,6 @@ class ApiClient {
     const options: RequestInit = {
       method,
       headers,
-      credentials: "include",
     };
 
     if (body) {
