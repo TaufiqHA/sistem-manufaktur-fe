@@ -10,9 +10,9 @@ export default defineConfig(({ mode }) => {
       host: "0.0.0.0",
       proxy: {
         "/api": {
-          target: "https://api.manufactur.id",
+          target: "https://localhost:8000/api",
           changeOrigin: true,
-          secure: true,
+          secure: false,
         },
       },
     },
