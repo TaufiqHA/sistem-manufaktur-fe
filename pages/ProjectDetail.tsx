@@ -92,16 +92,48 @@ export const ProjectDetail: React.FC = () => {
           }));
           setProjectItems(transformedItems);
 
-          // Fetch BOM items for each project item
-          const bomData: Record<string | number, BomItemData[]> = {};
-          for (const item of items) {
+          // Fetch BOM items for all project items concurrently instead of sequentially
+          const bomPromises = transformedItems.map(async (item) => {
             if (item.id) {
-              const bomResponse = await apiClient.getBomItemsByProjectItem(item.id);
-              if (bomResponse.success && bomResponse.data) {
-                bomData[item.id] = Array.isArray(bomResponse.data) ? bomResponse.data : (bomResponse.data.data || []);
+              try {
+                const bomResponse = await apiClient.getBomItemsByProjectItem(item.id);
+                if (bomResponse.success && bomResponse.data) {
+                  return {
+                    itemId: item.id,
+                    bomItems: Array.isArray(bomResponse.data) ? bomResponse.data : (bomResponse.data.data || [])
+                  };
+                }
+              } catch (error) {
+                console.error(`Error fetching BOM for item ${item.id}:`, error);
+                return {
+                  itemId: item.id,
+                  bomItems: []
+                };
               }
             }
-          }
+            return {
+              itemId: item.id,
+              bomItems: []
+            };
+          });
+
+          // Wait for all BOM fetches to complete
+          const bomResults = await Promise.allSettled(bomPromises);
+
+          // Build the BOM data object from results
+          const bomData: Record<string | number, BomItemData[]> = {};
+          bomResults.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+              const { itemId, bomItems } = result.value;
+              bomData[itemId] = bomItems;
+            } else {
+              // Handle rejected promises by logging and providing empty array
+              const item = transformedItems[index];
+              console.error(`Failed to fetch BOM for item ${item.id}:`, result.reason);
+              bomData[item.id] = [];
+            }
+          });
+
           setBomItemsByItemId(bomData);
         } else {
           setError(itemsResponse.message || 'Gagal memuat daftar item');
@@ -172,30 +204,32 @@ export const ProjectDetail: React.FC = () => {
     fetchTasks();
   }, [id]);
 
-  useEffect(() => {
-    const fetchMachines = async () => {
-      if (!isTaskModalOpen && !isConfigModalOpen && !isMachineModalOpen) return;
-      setMachinesLoading(true);
-      try {
-        const response = await apiClient.getMachines();
-        if (response.success && response.data) {
-          const machineList = Array.isArray(response.data) ? response.data : (response.data.data || []);
-          // Ensure all machine IDs are strings for consistent comparison
-          const normalizedMachines = machineList.map(m => ({
-            ...m,
-            id: String(m.id)
-          }));
-          setApiMachines(normalizedMachines);
-        }
-      } catch (err) {
-        console.error('Error fetching machines:', err);
-      } finally {
-        setMachinesLoading(false);
+  // Memoize machines to avoid unnecessary re-fetching
+  const fetchMachines = async () => {
+    if (!isTaskModalOpen && !isConfigModalOpen && !isMachineModalOpen) return;
+    if (apiMachines.length > 0) return; // Don't fetch if already loaded
+    setMachinesLoading(true);
+    try {
+      const response = await apiClient.getMachines();
+      if (response.success && response.data) {
+        const machineList = Array.isArray(response.data) ? response.data : (response.data.data || []);
+        // Ensure all machine IDs are strings for consistent comparison
+        const normalizedMachines = machineList.map(m => ({
+          ...m,
+          id: String(m.id)
+        }));
+        setApiMachines(normalizedMachines);
       }
-    };
+    } catch (err) {
+      console.error('Error fetching machines:', err);
+    } finally {
+      setMachinesLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchMachines();
-  }, [isTaskModalOpen, isConfigModalOpen, isMachineModalOpen]);
+  }, [isTaskModalOpen, isConfigModalOpen, isMachineModalOpen]); // Only fetch when modals open
 
   useEffect(() => {
     // Calculate task statistics for current project only
@@ -208,9 +242,9 @@ export const ProjectDetail: React.FC = () => {
       downtime: apiTasks.filter(t => t.status === 'DOWNTIME').length
     };
     setApiTaskStatistics(stats);
-  }, [apiTasks]);
+  }, [apiTasks]); // This is fine as it only depends on apiTasks
 
-  // Merge store tasks with API tasks for real-time progress updates
+  // Memoize the merged tasks to prevent unnecessary re-renders
   const mergedTasks = useMemo(() => {
     const storeTaskMap = new Map(storeTasks.map(t => [t.id, t]));
     const apiTaskMap = new Map(apiTasks.map(t => [t.id, t]));
@@ -218,7 +252,7 @@ export const ProjectDetail: React.FC = () => {
     // Prioritize store tasks (they're updated in real-time when production is reported)
     const allTaskIds = new Set([...storeTaskMap.keys(), ...apiTaskMap.keys()]);
     return Array.from(allTaskIds).map(id => storeTaskMap.get(id) || apiTaskMap.get(id)).filter(Boolean) as (Task | TaskData)[];
-  }, [storeTasks, apiTasks]);
+  }, [storeTasks, apiTasks]); // Only recompute when storeTasks or apiTasks change
 
   const projectTasks = mergedTasks.filter(t => (t.projectId || t.project_id) === id);
 
@@ -306,21 +340,8 @@ export const ProjectDetail: React.FC = () => {
           const completedQuantityDifference = completedQty - (currentTask.completed_qty || 0);
           console.log('Reducing stock for item:', currentTask.item_id, 'Quantity difference:', completedQuantityDifference);
 
-          // Get the BOM items for this product item - fetch fresh if not in cache
-          let bomItems = bomItemsByItemId[currentTask.item_id] || [];
-
-          // If BOM items not cached, fetch them
-          if (bomItems.length === 0) {
-            try {
-              const bomResponse = await apiClient.getBomItemsByProjectItem(currentTask.item_id);
-              if (bomResponse.success && bomResponse.data) {
-                bomItems = Array.isArray(bomResponse.data) ? bomResponse.data : (bomResponse.data.data || []);
-                console.log('Fetched BOM items for item', currentTask.item_id, ':', bomItems);
-              }
-            } catch (err) {
-              console.error('Error fetching BOM items:', err);
-            }
-          }
+          // Get the BOM items for this product item from the cached data
+          const bomItems = bomItemsByItemId[currentTask.item_id] || [];
           console.log('BOM Items for item', currentTask.item_id, ':', bomItems);
 
           if (bomItems.length === 0) {
@@ -328,7 +349,7 @@ export const ProjectDetail: React.FC = () => {
           }
 
           // Reduce stock for each material based on the quantity completed
-          for (const bomItem of bomItems) {
+          const updatePromises = bomItems.map(async (bomItem) => {
             if (bomItem.material_id && bomItem.id) {
               const quantityToReduce = completedQuantityDifference * (bomItem.quantity_per_unit || 0);
               console.log('Reducing material:', bomItem.material_id, 'by quantity:', quantityToReduce);
@@ -348,6 +369,14 @@ export const ProjectDetail: React.FC = () => {
                     realized: newRealized
                   });
                   console.log('BOM item realized update response:', bomUpdateResponse);
+
+                  // Update the local state to reflect the new realized value
+                  setBomItemsByItemId(prev => ({
+                    ...prev,
+                    [currentTask.item_id]: prev[currentTask.item_id].map(bom =>
+                      bom.id === bomItem.id ? { ...bom, realized: newRealized } : bom
+                    )
+                  }));
                 } else {
                   console.error(`Failed to reduce stock for material ${bomItem.material_id}:`, stockResponse.message);
                 }
@@ -356,7 +385,10 @@ export const ProjectDetail: React.FC = () => {
                 // Don't fail the whole operation if one material stock update fails
               }
             }
-          }
+          });
+
+          // Execute all stock updates in parallel
+          await Promise.allSettled(updatePromises);
         }
       } else {
         setError(response.message || 'Gagal mengubah kuantitas tugas');
@@ -424,6 +456,7 @@ export const ProjectDetail: React.FC = () => {
 
   // Filter tasks for current project - uses merged tasks for real-time progress updates
   const projectFilteredTasks = useMemo(() => {
+    if (!id) return [];
     return mergedTasks.filter(t => {
       const taskProjectId = (t as any).projectId || (t as any).project_id;
       return taskProjectId?.toString() === id?.toString();
@@ -446,10 +479,13 @@ export const ProjectDetail: React.FC = () => {
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   }, [project]);
 
-  // Auto-complete items when all workflow steps are finished
+  // Auto-complete items when all workflow steps are finished - optimized to prevent excessive API calls
   useEffect(() => {
     const checkAndCompleteItems = async () => {
-      for (const item of projectItems) {
+      // Create a copy of projectItems to work with
+      const updatedItems = [...projectItems];
+
+      for (const item of updatedItems) {
         if (!item.workflow || item.workflow.length === 0) continue;
 
         // Check if all workflow steps are completed
@@ -467,7 +503,9 @@ export const ProjectDetail: React.FC = () => {
               is_workflow_completed: true
             });
             if (response.success && response.data) {
-              setProjectItems(projectItems.map(i => i.id === item.id ? response.data : i));
+              setProjectItems(prevItems =>
+                prevItems.map(i => i.id === item.id ? response.data : i)
+              );
             }
           } catch (err) {
             console.error('Error marking item as workflow completed:', err);
@@ -477,7 +515,12 @@ export const ProjectDetail: React.FC = () => {
     };
 
     if (projectItems.length > 0 && mergedTasks.length > 0) {
-      checkAndCompleteItems();
+      // Debounce the check to prevent excessive calls
+      const timeoutId = setTimeout(() => {
+        checkAndCompleteItems();
+      }, 300); // Small delay to batch updates
+
+      return () => clearTimeout(timeoutId);
     }
   }, [mergedTasks, projectItems]);
 
@@ -683,8 +726,12 @@ export const ProjectDetail: React.FC = () => {
         setSelectedMachineByStep({});
         setError(null);
 
-        // Reload the page after all API calls complete
-        window.location.reload();
+        // Instead of full page reload, refetch the project data
+        // Reload the project data to reflect the changes
+        const projectResponse = await apiClient.getProject(id);
+        if (projectResponse.success && projectResponse.data) {
+          setProject(projectResponse.data as ProjectData);
+        }
       } else {
         setError(response.message || 'Gagal menyimpan alur produksi');
       }
