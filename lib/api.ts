@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://api.manufactur.id/api";
+const API_BASE_URL = "http://localhost:8000/api";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -148,6 +148,7 @@ interface MachinePersonnelData {
   shift?: string;
 }
 
+
 interface MachineData {
   id?: number;
   code: string;
@@ -155,6 +156,7 @@ interface MachineData {
   type: "POTONG" | "PLONG" | "PRESS" | "LAS" | "WT" | "POWDER" | "QC";
   capacity_per_hour: number;
   status: "IDLE" | "RUNNING" | "MAINTENANCE" | "OFFLINE" | "DOWNTIME";
+  pic?: number;
   personnel: MachinePersonnelData[];
   is_maintenance: boolean;
   created_at?: string;
@@ -175,6 +177,7 @@ interface MachineCreateRequest {
   type: "POTONG" | "PLONG" | "PRESS" | "LAS" | "WT" | "POWDER" | "QC";
   capacity_per_hour: number;
   status: "IDLE" | "RUNNING" | "MAINTENANCE" | "OFFLINE" | "DOWNTIME";
+  pic?: number;
   personnel: MachinePersonnelData[];
   is_maintenance: boolean;
 }

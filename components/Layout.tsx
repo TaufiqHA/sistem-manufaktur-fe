@@ -19,7 +19,6 @@ const NAV_ITEMS = [
   { label: 'Analytics', icon: BarChart3, path: '/reports', module: 'REPORTS' as ModuleName },
   { label: 'TV Display', icon: MonitorPlay, path: '/tv-display', module: 'DASHBOARD' as ModuleName },
   { label: 'Users', icon: Users, path: '/users', module: 'USERS' as ModuleName },
-  { label: 'Settings', icon: Settings, path: '/settings', module: 'USERS' as ModuleName },
 ];
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {

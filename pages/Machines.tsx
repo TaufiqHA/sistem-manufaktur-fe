@@ -12,6 +12,7 @@ interface FormMachine {
   type: 'POTONG' | 'PLONG' | 'PRESS' | 'LAS' | 'WT' | 'POWDER' | 'QC';
   capacity_per_hour: number;
   status: 'IDLE' | 'RUNNING' | 'MAINTENANCE' | 'OFFLINE' | 'DOWNTIME';
+  pic?: number; // Backend expects employee ID as integer
   personnel: Array<{
     id?: string | number;
     name: string;
@@ -42,6 +43,7 @@ export const Machines: React.FC = () => {
     type: 'POTONG',
     capacity_per_hour: 0,
     status: 'IDLE',
+    pic: undefined,
     personnel: [],
     is_maintenance: false,
   });
@@ -74,10 +76,11 @@ export const Machines: React.FC = () => {
       const machinesData = response.data?.data || response.data;
 
       if (Array.isArray(machinesData)) {
-        // Ensure personnel is always an array
+        // Ensure personnel is always an array and pic is properly handled
         const normalizedMachines = machinesData.map(m => ({
           ...m,
           personnel: Array.isArray(m.personnel) ? m.personnel : [],
+          pic: m.pic || undefined,
         }));
         setMachines(normalizedMachines);
       } else {
@@ -89,6 +92,12 @@ export const Machines: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getEmployeeNameById = (id: number | undefined) => {
+    if (!id) return '';
+    const employee = employees.find(emp => emp.id === id);
+    return employee ? employee.name : 'Unknown Employee';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -118,6 +127,7 @@ export const Machines: React.FC = () => {
         type: 'POTONG',
         capacity_per_hour: 0,
         status: 'IDLE',
+        pic: undefined,
         personnel: [],
         is_maintenance: false,
       });
@@ -152,6 +162,7 @@ export const Machines: React.FC = () => {
     setFormData({
       ...m,
       personnel: Array.isArray(m.personnel) ? m.personnel : [],
+      pic: m.pic || undefined,
     });
     fetchEmployees();
     setIsModalOpen(true);
@@ -212,6 +223,7 @@ export const Machines: React.FC = () => {
               type: 'POTONG',
               capacity_per_hour: 0,
               status: 'IDLE',
+              pic: undefined,
               personnel: [],
               is_maintenance: false,
             });
@@ -306,30 +318,43 @@ export const Machines: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-8 py-5">
-                        <div className="space-y-2">
-                          <div className="flex -space-x-2">
-                            {Array.isArray(m.personnel) && m.personnel.slice(0, 3).map((p, idx) => (
-                              <div
-                                key={idx}
-                                className="w-8 h-8 rounded-full bg-blue-600 border-2 border-white flex items-center justify-center text-[10px] text-white font-black"
-                                title={`${p.name}`}
-                              >
-                                {p.name?.charAt(0) || '?'}
+                        <div className="space-y-3">
+                          {/* PIC Section */}
+                          {m.pic && (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1 text-[9px] text-slate-500 font-bold">
+                                <UsersIcon size={10} className="text-amber-500" />
+                                <span>PIC: {getEmployeeNameById(m.pic)}</span>
                               </div>
-                            ))}
-                            {Array.isArray(m.personnel) && m.personnel.length > 3 && (
-                              <div className="w-8 h-8 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-[10px] text-slate-500 font-black">
-                                +{m.personnel.length - 3}
-                              </div>
-                            )}
-                            {(!Array.isArray(m.personnel) || m.personnel.length === 0) && <span className="text-[10px] text-slate-300 uppercase italic">Unassigned</span>}
-                          </div>
-                          {Array.isArray(m.personnel) && m.personnel.length > 0 && (
-                            <div className="text-[9px] text-slate-600 font-bold">
-                              {m.personnel.slice(0, 2).map(p => p.name).join(', ')}
-                              {m.personnel.length > 2 && ` +${m.personnel.length - 2}`}
                             </div>
                           )}
+
+                          {/* Personnel Section */}
+                          <div className="space-y-1">
+                            <div className="flex -space-x-2">
+                              {Array.isArray(m.personnel) && m.personnel.slice(0, 3).map((p, idx) => (
+                                <div
+                                  key={idx}
+                                  className="w-8 h-8 rounded-full bg-blue-600 border-2 border-white flex items-center justify-center text-[10px] text-white font-black"
+                                  title={`${p.name}`}
+                                >
+                                  {p.name?.charAt(0) || '?'}
+                                </div>
+                              ))}
+                              {Array.isArray(m.personnel) && m.personnel.length > 3 && (
+                                <div className="w-8 h-8 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-[10px] text-slate-500 font-black">
+                                  +{m.personnel.length - 3}
+                                </div>
+                              )}
+                              {(!Array.isArray(m.personnel) || m.personnel.length === 0) && <span className="text-[10px] text-slate-300 uppercase italic">No operators</span>}
+                            </div>
+                            {Array.isArray(m.personnel) && m.personnel.length > 0 && (
+                              <div className="text-[9px] text-slate-600 font-bold">
+                                {m.personnel.slice(0, 2).map(p => p.name).join(', ')}
+                                {m.personnel.length > 2 && ` +${m.personnel.length - 2}`}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-8 py-5 text-right">
@@ -463,6 +488,31 @@ export const Machines: React.FC = () => {
               </div>
 
               <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Person in Charge (PIC)
+                  </label>
+                  <select
+                    className="w-full p-4 bg-slate-50 rounded-2xl font-black outline-none"
+                    value={formData.pic || ''}
+                    onChange={e => {
+                      const selectedEmployeeId = e.target.value ? parseInt(e.target.value) : undefined;
+                      setFormData({
+                        ...formData,
+                        pic: selectedEmployeeId ? selectedEmployeeId : undefined
+                      });
+                    }}
+                    disabled={employeesLoading}
+                  >
+                    <option value="">Pilih PIC...</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="flex justify-between items-center">
                   <h4 className="text-xs font-black text-slate-900 uppercase tracking-[0.2em]">
                     Daftar Alokasi Personel (Operator)

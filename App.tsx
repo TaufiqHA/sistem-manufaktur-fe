@@ -10,7 +10,6 @@ import { MachineBoard } from './pages/MachineBoard';
 import { TvDisplay } from './pages/TvDisplay';
 import { Materials } from './pages/Materials';
 import { Machines } from './pages/Machines';
-import { Settings } from './pages/Settings';
 import { Login } from './pages/Login';
 import { Users } from './pages/Users';
 import { Reports } from './pages/Reports';
@@ -40,7 +39,6 @@ function App() {
           <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
           
           <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
