@@ -44,6 +44,7 @@ export const Procurement: React.FC = () => {
   const [poItemsByPO, setPoItemsByPO] = useState<Record<string | number, POItemData[]>>({});
   const [isLoadingPoItems, setIsLoadingPoItems] = useState(false);
   const [poItemsError, setPoItemsError] = useState<string | null>(null);
+  const poItemsFetchedRef = React.useRef<Set<string>>(new Set());
 
   // Modals
   const [isRfqModalOpen, setIsRfqModalOpen] = useState(false);
@@ -66,8 +67,10 @@ export const Procurement: React.FC = () => {
   // Receiving State
   const [bdData, setBdData] = useState({ description: '' });
 
-  // Fetch Suppliers from API on component mount
+  // Fetch Suppliers only when SUPPLIERS tab is active
   useEffect(() => {
+    if (activeTab !== 'SUPPLIERS') return;
+
     const fetchSuppliers = async () => {
       setIsLoadingSuppliers(true);
       setSuppliersError(null);
@@ -80,7 +83,6 @@ export const Procurement: React.FC = () => {
           if (Array.isArray(supplierData)) {
             setSuppliers(supplierData);
           } else {
-            console.warn('API returned unexpected suppliers structure:', response.data);
             setSuppliers(storeSuppliers.map(s => ({
               id: s.id,
               name: s.name,
@@ -90,7 +92,6 @@ export const Procurement: React.FC = () => {
           }
         } else {
           setSuppliersError(response.message || 'Failed to fetch suppliers');
-          // Fallback to store suppliers if API fails
           setSuppliers(storeSuppliers.map(s => ({
             id: s.id,
             name: s.name,
@@ -102,7 +103,6 @@ export const Procurement: React.FC = () => {
         const errorMessage = error instanceof Error ? error.message : 'Failed to fetch suppliers';
         console.error('Error fetching suppliers:', errorMessage);
         setSuppliersError(errorMessage);
-        // Fallback to store suppliers
         setSuppliers(storeSuppliers.map(s => ({
           id: s.id,
           name: s.name,
@@ -115,7 +115,7 @@ export const Procurement: React.FC = () => {
     };
 
     fetchSuppliers();
-  }, [supplierSearchTerm, storeSuppliers]);
+  }, [activeTab, supplierSearchTerm, storeSuppliers]);
 
   // Fetch RFQ Items for a specific RFQ
   const fetchRfqItems = React.useCallback(async (rfqId: string | number) => {
@@ -173,8 +173,10 @@ export const Procurement: React.FC = () => {
     }
   }, []);
 
-  // Fetch RFQs from API on component mount
+  // Fetch RFQs only when RFQ tab is active
   useEffect(() => {
+    if (activeTab !== 'RFQ') return;
+
     const fetchRfqs = async () => {
       setIsLoadingRfqs(true);
       setRfqError(null);
@@ -202,8 +204,6 @@ export const Procurement: React.FC = () => {
               fetchRfqItems(rfq.id);
             });
           } else {
-            // API returned data but not in expected format
-            console.warn('API returned unexpected data structure:', response.data);
             setRfqs([]);
           }
         } else {
@@ -221,19 +221,21 @@ export const Procurement: React.FC = () => {
     };
 
     fetchRfqs();
-  }, []); // Empty dependency array - only fetch on mount
+  }, [activeTab]);
 
   // Fetch RFQ items whenever RFQs change (handles reload and new RFQs)
   useEffect(() => {
-    if (rfqs.length > 0) {
-      rfqs.forEach(rfq => {
-        fetchRfqItems(rfq.id);
-      });
-    }
-  }, [rfqs, fetchRfqItems]);
+    if (activeTab !== 'RFQ' || rfqs.length === 0) return;
 
-  // Fetch Materials from API
+    rfqs.forEach(rfq => {
+      fetchRfqItems(rfq.id);
+    });
+  }, [rfqs, fetchRfqItems, activeTab]);
+
+  // Fetch Materials only when RFQ tab is active (needed for RFQ form)
   useEffect(() => {
+    if (activeTab !== 'RFQ') return;
+
     const fetchMaterials = async () => {
       setIsLoadingMaterials(true);
       setMaterialsError(null);
@@ -257,20 +259,16 @@ export const Procurement: React.FC = () => {
             }));
             setMaterials(convertedMaterials);
           } else {
-            // API returned data but not in expected format
-            console.warn('API returned unexpected materials structure:', response.data);
             setMaterials(storeMaterials);
           }
         } else {
           setMaterialsError(response.message || 'Failed to fetch materials');
-          // Fallback to store materials if API fails
           setMaterials(storeMaterials);
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to fetch materials';
         console.error('Error fetching materials:', errorMessage);
         setMaterialsError(errorMessage);
-        // Fallback to store materials
         setMaterials(storeMaterials);
       } finally {
         setIsLoadingMaterials(false);
@@ -278,10 +276,17 @@ export const Procurement: React.FC = () => {
     };
 
     fetchMaterials();
-  }, [storeMaterials]);
+  }, [activeTab, storeMaterials]);
 
   // Fetch PO Items for a specific PO
-  const fetchPoItems = async (poId: string | number) => {
+  const fetchPoItems = React.useCallback(async (poId: string | number) => {
+    const poIdStr = poId.toString();
+
+    // Don't fetch if already fetched
+    if (poItemsFetchedRef.current.has(poIdStr)) {
+      return;
+    }
+
     try {
       const response = await apiClient.getPOItemsByPOId(poId);
       if (response.success && response.data) {
@@ -289,17 +294,24 @@ export const Procurement: React.FC = () => {
         if (Array.isArray(itemsData)) {
           setPoItemsByPO(prev => ({
             ...prev,
-            [poId]: itemsData
+            [poIdStr]: itemsData
           }));
         }
       }
+
+      // Mark as fetched in ref
+      poItemsFetchedRef.current.add(poIdStr);
     } catch (error) {
       console.error(`Error fetching PO items for PO ${poId}:`, error);
+      // Mark as fetched to prevent retry loops
+      poItemsFetchedRef.current.add(poIdStr);
     }
-  };
+  }, []);
 
-  // Fetch Purchase Orders from API on component mount
+  // Fetch Purchase Orders only when PO tab is active
   useEffect(() => {
+    if (activeTab !== 'PO') return;
+
     const fetchPurchaseOrders = async () => {
       setIsLoadingPOs(true);
       setPoError(null);
@@ -317,8 +329,6 @@ export const Procurement: React.FC = () => {
               fetchPoItems(po.id || '');
             });
           } else {
-            // API returned data but not in expected format
-            console.warn('API returned unexpected PO structure:', response.data);
             setPurchaseOrders([]);
           }
         } else {
@@ -336,21 +346,17 @@ export const Procurement: React.FC = () => {
     };
 
     fetchPurchaseOrders();
-  }, []);
+  }, [activeTab]);
 
   // Fetch PO items whenever Purchase Orders change (handles reload and new POs)
   useEffect(() => {
-    if (purchaseOrders.length > 0) {
-      // Check which POs are missing items in cache
-      purchaseOrders.forEach(po => {
-        const poId = po.id || '';
-        // If items are not in cache, fetch them
-        if (!poItemsByPO[poId] || poItemsByPO[poId].length === 0) {
-          fetchPoItems(poId);
-        }
-      });
-    }
-  }, [purchaseOrders]);
+    if (activeTab !== 'PO' || purchaseOrders.length === 0) return;
+
+    // Fetch items for each PO (ref will prevent duplicate fetches)
+    purchaseOrders.forEach(po => {
+      fetchPoItems(po.id || '');
+    });
+  }, [purchaseOrders, activeTab, fetchPoItems]);
 
   if (!can('view', 'PROCUREMENT')) return <div className="p-12 text-center text-slate-500 font-bold uppercase tracking-widest">Akses Ditolak.</div>;
 
@@ -696,8 +702,8 @@ export const Procurement: React.FC = () => {
     <div className="space-y-10">
       <div className="flex justify-between items-end">
         <div>
-           <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">Sistem Pengadaan</h1>
-           <p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-[10px]">Alur RFQ &rarr; PO &rarr; Barang Datang &rarr; Update Stok</p>
+           <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Sistem Pengadaan</h1>
+           <p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-[10px]">Kelola seluruh proses pengadaan material dari RFQ hingga penerimaan barang</p>
         </div>
         <div className="flex gap-4">
            {activeTab === 'RFQ' && (
