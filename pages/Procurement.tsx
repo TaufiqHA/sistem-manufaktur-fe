@@ -25,6 +25,8 @@ export const Procurement: React.FC = () => {
 
   // API State - RFQ Items
   const [rfqItemsByRfq, setRfqItemsByRfq] = useState<Record<string | number, ProcurementItem[]>>({});
+  const [rfqItemsLoadingStatus, setRfqItemsLoadingStatus] = useState<Record<string | number, boolean>>({});
+  const rfqItemsFetchedRef = React.useRef<Set<string>>(new Set());
   const [isLoadingRfqItems, setIsLoadingRfqItems] = useState(false);
   const [rfqItemsError, setRfqItemsError] = useState<string | null>(null);
 
@@ -116,27 +118,60 @@ export const Procurement: React.FC = () => {
   }, [supplierSearchTerm, storeSuppliers]);
 
   // Fetch RFQ Items for a specific RFQ
-  const fetchRfqItems = async (rfqId: string | number) => {
+  const fetchRfqItems = React.useCallback(async (rfqId: string | number) => {
+    const rfqIdStr = rfqId.toString();
+
+    // Don't fetch if already fetched
+    if (rfqItemsFetchedRef.current.has(rfqIdStr)) {
+      return;
+    }
+
+    // Mark as loading
+    setRfqItemsLoadingStatus(prev => ({
+      ...prev,
+      [rfqIdStr]: true
+    }));
+
     try {
       const response = await apiClient.getRFQItemsByRFQId(rfqId);
+
       if (response.success && response.data) {
-        const itemsData = response.data.data || [];
+        // API returns items directly in response.data, not nested in response.data.data
+        let itemsData = Array.isArray(response.data) ? response.data : (response.data.data || []);
+
         if (Array.isArray(itemsData)) {
           const convertedItems: ProcurementItem[] = itemsData.map(item => ({
             materialId: typeof item.material_id === 'string' ? item.material_id : item.material_id.toString(),
             name: item.name,
             qty: item.qty
           }));
+
           setRfqItemsByRfq(prev => ({
             ...prev,
-            [rfqId]: convertedItems
+            [rfqIdStr]: convertedItems
           }));
         }
       }
+
+      // Mark as fetched in ref
+      rfqItemsFetchedRef.current.add(rfqIdStr);
     } catch (error) {
       console.error(`Error fetching RFQ items for RFQ ${rfqId}:`, error);
+      // Set empty array to indicate fetch was attempted
+      setRfqItemsByRfq(prev => ({
+        ...prev,
+        [rfqIdStr]: []
+      }));
+      // Mark as fetched to prevent retry loops
+      rfqItemsFetchedRef.current.add(rfqIdStr);
+    } finally {
+      // Mark as done loading
+      setRfqItemsLoadingStatus(prev => ({
+        ...prev,
+        [rfqIdStr]: false
+      }));
     }
-  };
+  }, []);
 
   // Fetch RFQs from API on component mount
   useEffect(() => {
@@ -187,6 +222,15 @@ export const Procurement: React.FC = () => {
 
     fetchRfqs();
   }, []); // Empty dependency array - only fetch on mount
+
+  // Fetch RFQ items whenever RFQs change (handles reload and new RFQs)
+  useEffect(() => {
+    if (rfqs.length > 0) {
+      rfqs.forEach(rfq => {
+        fetchRfqItems(rfq.id);
+      });
+    }
+  }, [rfqs, fetchRfqItems]);
 
   // Fetch Materials from API
   useEffect(() => {
@@ -293,6 +337,20 @@ export const Procurement: React.FC = () => {
 
     fetchPurchaseOrders();
   }, []);
+
+  // Fetch PO items whenever Purchase Orders change (handles reload and new POs)
+  useEffect(() => {
+    if (purchaseOrders.length > 0) {
+      // Check which POs are missing items in cache
+      purchaseOrders.forEach(po => {
+        const poId = po.id || '';
+        // If items are not in cache, fetch them
+        if (!poItemsByPO[poId] || poItemsByPO[poId].length === 0) {
+          fetchPoItems(poId);
+        }
+      });
+    }
+  }, [purchaseOrders]);
 
   if (!can('view', 'PROCUREMENT')) return <div className="p-12 text-center text-slate-500 font-bold uppercase tracking-widest">Akses Ditolak.</div>;
 
@@ -706,10 +764,15 @@ export const Procurement: React.FC = () => {
               <tbody className="divide-y divide-slate-50 font-bold">
                  {rfqs.map(r => {
                    // Use items from the API cache first, then fall back to RFQ items, then store data
-                   const rfqId = r.id;
-                   const apiItems = (rfqItemsByRfq[rfqId] || rfqItemsByRfq[rfqId?.toString()]) || [];
+                   const rfqIdStr = r.id.toString();
+                   const apiItems = rfqItemsByRfq[rfqIdStr] || [];
                    const storeRfq = mockRfqs.find(m => m.id === r.id || m.code === r.code);
-                   const displayItems = apiItems.length > 0 ? apiItems : (r.items && r.items.length > 0 ? r.items : (storeRfq?.items || []));
+
+                   // Determine if we're still loading items for this specific RFQ
+                   const isRfqItemsLoading = rfqItemsLoadingStatus[rfqIdStr] === true;
+
+                   // Use the original items count from the RFQ object if API items haven't loaded yet
+                   const displayItems = isRfqItemsLoading ? (r.items && r.items.length > 0 ? r.items : (storeRfq?.items || [])) : apiItems;
 
                    return (
                    <tr key={r.id} className="hover:bg-slate-50/50">
@@ -718,7 +781,13 @@ export const Procurement: React.FC = () => {
                         <p className="text-[10px] text-slate-400 mt-1">{new Date(r.date).toLocaleDateString()}</p>
                      </td>
                      <td className="px-8 py-5 text-slate-600">{r.description || '-'}</td>
-                     <td className="px-8 py-5">{displayItems.length} Macam Material</td>
+                     <td className="px-8 py-5">
+                       {isRfqItemsLoading ? (
+                         <span className="text-slate-400 italic">Memuat...</span>
+                       ) : (
+                         `${displayItems.length} Macam Material`
+                       )}
+                     </td>
                      <td className="px-8 py-5">
                         <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${r.status === 'PO_CREATED' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>{r.status}</span>
                      </td>
