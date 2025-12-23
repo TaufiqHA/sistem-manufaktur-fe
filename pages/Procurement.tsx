@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { apiClient } from '../lib/api';
+import { apiClient, POItemData, PurchaseOrderData } from '../lib/api';
 import {
   Plus, Search, ShoppingCart, FileText, Truck, Users, Trash2, ArrowRight, CheckCircle, Package, Clock, X, ChevronRight, Save, Coins, FileSpreadsheet, AlertCircle
 } from 'lucide-react';
@@ -32,6 +32,16 @@ export const Procurement: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
+
+  // API State - Purchase Orders
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderData[]>([]);
+  const [isLoadingPOs, setIsLoadingPOs] = useState(false);
+  const [poError, setPoError] = useState<string | null>(null);
+
+  // API State - PO Items
+  const [poItemsByPO, setPoItemsByPO] = useState<Record<string | number, POItemData[]>>({});
+  const [isLoadingPoItems, setIsLoadingPoItems] = useState(false);
+  const [poItemsError, setPoItemsError] = useState<string | null>(null);
 
   // Modals
   const [isRfqModalOpen, setIsRfqModalOpen] = useState(false);
@@ -225,6 +235,64 @@ export const Procurement: React.FC = () => {
 
     fetchMaterials();
   }, [storeMaterials]);
+
+  // Fetch PO Items for a specific PO
+  const fetchPoItems = async (poId: string | number) => {
+    try {
+      const response = await apiClient.getPOItemsByPOId(poId);
+      if (response.success && response.data) {
+        const itemsData = response.data.data || [];
+        if (Array.isArray(itemsData)) {
+          setPoItemsByPO(prev => ({
+            ...prev,
+            [poId]: itemsData
+          }));
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching PO items for PO ${poId}:`, error);
+    }
+  };
+
+  // Fetch Purchase Orders from API on component mount
+  useEffect(() => {
+    const fetchPurchaseOrders = async () => {
+      setIsLoadingPOs(true);
+      setPoError(null);
+      try {
+        const response = await apiClient.getPurchaseOrders(1, 100);
+
+        if (response.success && response.data) {
+          // Handle the response data structure
+          const poData = response.data.data || response.data;
+
+          if (Array.isArray(poData)) {
+            setPurchaseOrders(poData);
+            // Fetch items for each PO
+            poData.forEach(po => {
+              fetchPoItems(po.id || '');
+            });
+          } else {
+            // API returned data but not in expected format
+            console.warn('API returned unexpected PO structure:', response.data);
+            setPurchaseOrders([]);
+          }
+        } else {
+          setPoError(response.message || 'Failed to fetch purchase orders');
+          setPurchaseOrders([]);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch purchase orders';
+        console.error('Error fetching purchase orders:', errorMessage);
+        setPoError(errorMessage);
+        setPurchaseOrders([]);
+      } finally {
+        setIsLoadingPOs(false);
+      }
+    };
+
+    fetchPurchaseOrders();
+  }, []);
 
   if (!can('view', 'PROCUREMENT')) return <div className="p-12 text-center text-slate-500 font-bold uppercase tracking-widest">Akses Ditolak.</div>;
 
@@ -423,23 +491,125 @@ export const Procurement: React.FC = () => {
     setActiveTab('PO');
   };
 
-  const submitPO = (e: React.FormEvent) => {
+  const submitPO = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!poData.supplierId) return alert("Pilih Supplier!");
-    const grandTotal = poData.items.reduce((acc, curr) => acc + ((curr.price || 0) * curr.qty), 0);
-    const po: PurchaseOrder = {
-      id: `po-${Date.now()}`,
-      code: `PO-${Math.floor(Math.random() * 9000) + 1000}`,
-      rfqId: isPoModalOpen?.id,
-      supplierId: poData.supplierId,
-      date: new Date().toISOString(),
-      description: poData.description,
-      items: poData.items.map(i => ({ ...i, subtotal: (i.price || 0) * i.qty })),
-      grandTotal,
-      status: 'OPEN'
-    };
-    createPO(po);
-    setIsPoModalOpen(null);
+
+    try {
+      setIsSubmittingRfq(true);
+      const grandTotal = poData.items.reduce((acc, curr) => acc + ((curr.price || 0) * curr.qty), 0);
+      const poCode = `PO-${Math.floor(Math.random() * 9000) + 1000}`;
+
+      // Create Purchase Order via API
+      const poResponse = await apiClient.createPurchaseOrder({
+        code: poCode,
+        rfq_id: isPoModalOpen?.id ? (typeof isPoModalOpen.id === 'string' ? parseInt(isPoModalOpen.id) : isPoModalOpen.id) : undefined,
+        supplier_id: poData.supplierId,
+        date: new Date().toISOString(),
+        description: poData.description,
+        grand_total: grandTotal,
+        status: 'OPEN'
+      });
+
+      if (poResponse.success && poResponse.data) {
+        const poDataFromApi = poResponse.data.data || poResponse.data;
+        const poId = poDataFromApi.id;
+
+        // Create PO Items via API
+        try {
+          const createdPoItems: POItemData[] = [];
+
+          for (const item of poData.items) {
+            const itemSubtotal = (item.price || 0) * item.qty;
+            const itemResponse = await apiClient.createPOItem({
+              po_id: poId!,
+              material_id: item.materialId,
+              name: item.name,
+              qty: item.qty,
+              price: item.price || 0,
+              subtotal: itemSubtotal
+            });
+
+            if (itemResponse.success && itemResponse.data) {
+              const itemData = itemResponse.data.data || itemResponse.data;
+              createdPoItems.push(itemData);
+            } else {
+              console.warn(`Failed to create PO item ${item.name}:`, itemResponse.message);
+            }
+          }
+
+          // Store the created items in the local cache
+          setPoItemsByPO(prev => ({
+            ...prev,
+            [poId]: createdPoItems
+          }));
+
+          // Update local state with the new PO
+          setPurchaseOrders(prev => [...prev, poDataFromApi]);
+
+          // Update RFQ status to PO_CREATED
+          if (isPoModalOpen?.id) {
+            try {
+              const rfqIdToUpdate = typeof isPoModalOpen.id === 'string' ? parseInt(isPoModalOpen.id) : isPoModalOpen.id;
+              await apiClient.updateRFQ(rfqIdToUpdate, { status: 'PO_CREATED' });
+
+              // Update local RFQ state and preserve items
+              setRfqs(prev => prev.map(rfq => {
+                if (rfq.id === isPoModalOpen.id || rfq.code === isPoModalOpen.code) {
+                  // Always preserve items from modal (actual items used for PO)
+                  // Fallback to cache, then RFQ items if modal items not available
+                  const modalItems = isPoModalOpen.items && isPoModalOpen.items.length > 0 ? isPoModalOpen.items : undefined;
+                  const rfqIdForCache = rfq.id;
+                  const cachedItems = (rfqItemsByRfq[rfqIdForCache] || rfqItemsByRfq[rfqIdForCache?.toString()]) || [];
+                  const itemsToPreserve = modalItems || (cachedItems.length > 0 ? cachedItems : rfq.items);
+
+                  return {
+                    ...rfq,
+                    status: 'PO_CREATED',
+                    items: itemsToPreserve && itemsToPreserve.length > 0 ? itemsToPreserve : rfq.items
+                  };
+                }
+                return rfq;
+              }));
+            } catch (rfqUpdateError) {
+              console.warn('Failed to update RFQ status:', rfqUpdateError);
+            }
+          }
+
+          // Also add to store for consistency
+          const po: PurchaseOrder = {
+            id: poId?.toString() || `po-${Date.now()}`,
+            code: poCode,
+            rfqId: isPoModalOpen?.id,
+            supplierId: poData.supplierId,
+            date: new Date().toISOString(),
+            description: poData.description,
+            items: poData.items.map(i => ({ ...i, subtotal: (i.price || 0) * i.qty })),
+            grandTotal,
+            status: 'OPEN'
+          };
+          createPO(po);
+
+          // Reset form data
+          setPoData({ supplierId: '', description: '', items: [] });
+          setIsPoModalOpen(null);
+          alert(`Purchase Order ${poCode} berhasil dibuat dengan ${createdPoItems.length} item! RFQ status telah diperbarui.`);
+        } catch (itemError) {
+          const errorMessage = itemError instanceof Error ? itemError.message : 'Gagal membuat PO items';
+          console.error('Error creating PO items:', errorMessage);
+          alert(`PO dibuat namun ada error saat membuat item: ${errorMessage}`);
+          setIsPoModalOpen(null);
+        }
+      } else {
+        alert(poResponse.message || 'Gagal membuat Purchase Order');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan';
+      console.error('Submit PO error:', errorMessage, error);
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setIsSubmittingRfq(false);
+    }
   };
 
   const startReceiving = (po: PurchaseOrder) => {
@@ -536,7 +706,8 @@ export const Procurement: React.FC = () => {
               <tbody className="divide-y divide-slate-50 font-bold">
                  {rfqs.map(r => {
                    // Use items from the API cache first, then fall back to RFQ items, then store data
-                   const apiItems = rfqItemsByRfq[r.id] || [];
+                   const rfqId = r.id;
+                   const apiItems = (rfqItemsByRfq[rfqId] || rfqItemsByRfq[rfqId?.toString()]) || [];
                    const storeRfq = mockRfqs.find(m => m.id === r.id || m.code === r.code);
                    const displayItems = apiItems.length > 0 ? apiItems : (r.items && r.items.length > 0 ? r.items : (storeRfq?.items || []));
 
@@ -555,6 +726,17 @@ export const Procurement: React.FC = () => {
                         {r.status === 'DRAFT' && (
                           <button onClick={() => startCreatePO({ ...r, items: displayItems })} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2 ml-auto">Buat PO <ChevronRight size={14}/></button>
                         )}
+                        {r.status === 'PO_CREATED' && (
+                          <button onClick={() => {
+                            const relatedPo = purchaseOrders.find(p => p.rfq_id === (typeof r.id === 'string' ? parseInt(r.id) : r.id) || p.rfq_id?.toString() === r.id?.toString());
+                            if (relatedPo) {
+                              setActiveTab('PO');
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            } else {
+                              alert('PO tidak ditemukan');
+                            }
+                          }} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2 ml-auto">Lihat PO <ChevronRight size={14}/></button>
+                        )}
                      </td>
                    </tr>
                    );
@@ -567,42 +749,97 @@ export const Procurement: React.FC = () => {
       )}
 
       {activeTab === 'PO' && (
-        <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-black tracking-widest">
-              <tr>
-                <th className="px-8 py-5">Kode / Tanggal</th>
-                <th className="px-8 py-5">Supplier</th>
-                <th className="px-8 py-5">Nilai Transaksi</th>
-                <th className="px-8 py-5">Status</th>
-                <th className="px-8 py-5 text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 font-bold">
-               {pos.map(p => (
-                 <tr key={p.id} className="hover:bg-slate-50/50">
-                   <td className="px-8 py-5">
-                      <p className="text-emerald-600 font-black">{p.code}</p>
-                      <p className="text-[10px] text-slate-400 mt-1">{new Date(p.date).toLocaleDateString()}</p>
-                   </td>
-                   <td className="px-8 py-5 text-slate-800">
-                      {suppliers.find(s => s.id?.toString() === p.supplierId?.toString())?.name ||
-                       storeSuppliers.find(s => s.id === p.supplierId)?.name}
-                   </td>
-                   <td className="px-8 py-5 text-blue-600 font-black">Rp {p.grandTotal.toLocaleString()}</td>
-                   <td className="px-8 py-5">
-                      <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${p.status === 'RECEIVED' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{p.status}</span>
-                   </td>
-                   <td className="px-8 py-5 text-right">
-                      {p.status === 'OPEN' && (
-                        <button onClick={() => startReceiving(p)} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-2 ml-auto">Penerimaan Barang <Truck size={14}/></button>
-                      )}
-                   </td>
-                 </tr>
-               ))}
-               {pos.length === 0 && <tr><td colSpan={5} className="py-20 text-center text-slate-300 font-black uppercase italic tracking-widest">Belum ada PO</td></tr>}
-            </tbody>
-          </table>
+        <div className="space-y-6">
+          {poError && (
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-[32px] p-6 flex items-start gap-4">
+              <div className="text-amber-600 font-black text-xl">⚠️</div>
+              <div className="flex-1">
+                <p className="font-black text-amber-900 text-sm uppercase tracking-widest">API Integration Status - Purchase Orders</p>
+                <p className="text-amber-700 text-sm mt-1">{poError}</p>
+              </div>
+            </div>
+          )}
+          {poItemsError && (
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-[32px] p-6 flex items-start gap-4">
+              <div className="text-amber-600 font-black text-xl">⚠️</div>
+              <div className="flex-1">
+                <p className="font-black text-amber-900 text-sm uppercase tracking-widest">API Integration Status - PO Items</p>
+                <p className="text-amber-700 text-sm mt-1">{poItemsError}</p>
+              </div>
+            </div>
+          )}
+          {isLoadingPOs && (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-[32px] p-6 text-center">
+              <p className="font-black text-blue-600 uppercase tracking-widest">Memuat Purchase Orders dari API...</p>
+            </div>
+          )}
+          {isLoadingPoItems && (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-[32px] p-6 text-center">
+              <p className="font-black text-blue-600 uppercase tracking-widest">Memuat PO Items dari API...</p>
+            </div>
+          )}
+          <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-black tracking-widest">
+                <tr>
+                  <th className="px-8 py-5">Kode / Tanggal</th>
+                  <th className="px-8 py-5">Supplier</th>
+                  <th className="px-8 py-5">Nilai Transaksi</th>
+                  <th className="px-8 py-5">Status</th>
+                  <th className="px-8 py-5 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 font-bold">
+                 {purchaseOrders.length > 0 ? purchaseOrders.map(p => {
+                   const grandTotal = typeof p.grand_total === 'string' ? parseFloat(p.grand_total) : p.grand_total;
+                   const supplierName = p.supplier?.name || suppliers.find(s => s.id?.toString() === p.supplier_id?.toString())?.name ||
+                     storeSuppliers.find(s => s.id === p.supplier_id)?.name;
+                   const apiItems = poItemsByPO[p.id || ''] || [];
+                   const storePoItem = pos.find(m => m.id === p.id || m.code === p.code);
+                   const displayItems = apiItems.length > 0 ? apiItems : (storePoItem?.items || []);
+
+                   return (
+                   <tr key={p.id} className="hover:bg-slate-50/50">
+                     <td className="px-8 py-5">
+                        <p className="text-emerald-600 font-black">{p.code}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">{new Date(p.date).toLocaleDateString()}</p>
+                     </td>
+                     <td className="px-8 py-5 text-slate-800">
+                        {supplierName || '-'}
+                     </td>
+                     <td className="px-8 py-5 text-blue-600 font-black">Rp {grandTotal.toLocaleString()}</td>
+                     <td className="px-8 py-5">
+                        <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${p.status === 'RECEIVED' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{p.status}</span>
+                     </td>
+                     <td className="px-8 py-5 text-right">
+                        {p.status === 'OPEN' && (
+                          <button onClick={() => {
+                            const po: PurchaseOrder = {
+                              id: p.id?.toString() || '',
+                              code: p.code,
+                              supplierId: p.supplier_id?.toString() || '',
+                              date: p.date,
+                              description: p.description || '',
+                              items: displayItems.map(item => ({
+                                materialId: item.material_id?.toString() || '',
+                                name: item.name,
+                                qty: item.qty,
+                                price: typeof item.price === 'string' ? parseFloat(item.price) : item.price
+                              })),
+                              grandTotal: grandTotal,
+                              status: 'OPEN' as const
+                            };
+                            startReceiving(po);
+                          }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-2 ml-auto">Penerimaan Barang <Truck size={14}/></button>
+                        )}
+                     </td>
+                   </tr>
+                   );
+                 }) : null}
+                 {!isLoadingPOs && purchaseOrders.length === 0 && <tr><td colSpan={5} className="py-20 text-center text-slate-300 font-black uppercase italic tracking-widest">Belum ada PO</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -798,7 +1035,10 @@ export const Procurement: React.FC = () => {
            <div className="bg-white rounded-[48px] w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
               <div className="p-10 border-b bg-emerald-50/50 flex justify-between items-center">
                  <h2 className="text-3xl font-black text-emerald-900 uppercase tracking-tighter">Terbitkan PO dari {isPoModalOpen.code}</h2>
-                 <button onClick={() => setIsPoModalOpen(null)} className="p-4 hover:bg-slate-200 rounded-full transition-all"><X size={28}/></button>
+                 <button onClick={() => {
+                   setPoData({ supplierId: '', description: '', items: [] });
+                   setIsPoModalOpen(null);
+                 }} className="p-4 hover:bg-slate-200 rounded-full transition-all"><X size={28}/></button>
               </div>
               <div className="flex-1 overflow-y-auto p-10 space-y-10">
                  <div className="grid grid-cols-2 gap-10">

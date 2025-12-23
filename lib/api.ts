@@ -583,6 +583,158 @@ interface RFQItemUpdateRequest {
   qty?: number;
 }
 
+// Purchase Order Data Types
+interface PurchaseOrderData {
+  id?: number | string;
+  code: string;
+  rfq_id?: number | string | null;
+  supplier_id: number | string;
+  date: string;
+  description?: string | null;
+  grand_total: string | number;
+  status: "OPEN" | "RECEIVED";
+  created_at?: string;
+  updated_at?: string;
+  rfq?: {
+    id: number;
+    code: string;
+    title: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  };
+  supplier?: {
+    id: number | string;
+    name: string;
+    contact?: string;
+    phone?: string;
+    address?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+}
+
+interface PurchaseOrdersListResponse {
+  data: PurchaseOrderData[];
+  links?: {
+    first?: string;
+    last?: string;
+    prev?: string;
+    next?: string;
+  };
+  meta?: {
+    current_page: number;
+    from: number;
+    last_page: number;
+    path: string;
+    per_page: number;
+    to: number;
+    total: number;
+  };
+}
+
+interface PurchaseOrderResponse {
+  success: boolean;
+  message?: string;
+  data: PurchaseOrderData;
+}
+
+interface PurchaseOrderCreateRequest {
+  code: string;
+  rfq_id?: number | string;
+  supplier_id: number | string;
+  date: string;
+  description?: string;
+  grand_total: number;
+  status: "OPEN" | "RECEIVED";
+}
+
+interface PurchaseOrderUpdateRequest {
+  code?: string;
+  rfq_id?: number | string;
+  supplier_id?: number | string;
+  date?: string;
+  description?: string;
+  grand_total?: number;
+  status?: "OPEN" | "RECEIVED";
+}
+
+// PO Item Data Types
+interface POItemData {
+  id?: number | string;
+  po_id: number | string;
+  material_id: number | string;
+  name: string;
+  qty: number;
+  price: string | number;
+  subtotal: string | number;
+  created_at?: string;
+  updated_at?: string;
+  purchase_order?: {
+    id: number;
+    code: string;
+    date: string;
+    description: string;
+    status: "OPEN" | "RECEIVED";
+  };
+  material?: {
+    id: number;
+    code: string;
+    name: string;
+    unit: string;
+    current_stock: number;
+    safety_stock: number;
+    price_per_unit: string | number;
+    category: string;
+  };
+}
+
+interface POItemsListResponse {
+  success: boolean;
+  data: {
+    data: POItemData[];
+    links?: {
+      first?: string;
+      last?: string;
+      prev?: string;
+      next?: string;
+    };
+    meta?: {
+      current_page: number;
+      from: number;
+      last_page: number;
+      path: string;
+      per_page: number;
+      to: number;
+      total: number;
+    };
+  };
+}
+
+interface POItemResponse {
+  success: boolean;
+  message?: string;
+  data: POItemData;
+}
+
+interface POItemCreateRequest {
+  po_id: number | string;
+  material_id: number | string;
+  name: string;
+  qty: number;
+  price: number;
+  subtotal: number;
+}
+
+interface POItemUpdateRequest {
+  po_id?: number | string;
+  material_id?: number | string;
+  name?: string;
+  qty?: number;
+  price?: number;
+  subtotal?: number;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -1480,6 +1632,159 @@ class ApiClient {
     return this.request<DeleteResponse>(`/rfq-items/${id}`, "DELETE", {}, true);
   }
 
+  // Purchase Order API Methods
+  async getPurchaseOrders(
+    page: number = 1,
+    perPage: number = 15,
+    filters?: {
+      search?: string;
+      status?: "OPEN" | "RECEIVED";
+      supplier_id?: string | number;
+    }
+  ): Promise<ApiResponse<PurchaseOrdersListResponse>> {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("per_page", perPage.toString());
+    if (filters?.search) params.append("search", filters.search);
+    if (filters?.status) params.append("status", filters.status);
+    if (filters?.supplier_id) params.append("supplier_id", filters.supplier_id.toString());
+
+    return this.request<PurchaseOrdersListResponse>(
+      `/purchase-orders?${params.toString()}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getPurchaseOrder(id: string | number): Promise<ApiResponse<PurchaseOrderResponse>> {
+    return this.request<PurchaseOrderResponse>(
+      `/purchase-orders/${id}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async createPurchaseOrder(
+    data: PurchaseOrderCreateRequest
+  ): Promise<ApiResponse<PurchaseOrderResponse>> {
+    return this.request<PurchaseOrderResponse>(
+      "/purchase-orders",
+      "POST",
+      data,
+      true
+    );
+  }
+
+  async updatePurchaseOrder(
+    id: string | number,
+    data: PurchaseOrderUpdateRequest
+  ): Promise<ApiResponse<PurchaseOrderResponse>> {
+    return this.request<PurchaseOrderResponse>(
+      `/purchase-orders/${id}`,
+      "PUT",
+      data,
+      true
+    );
+  }
+
+  async deletePurchaseOrder(
+    id: string | number
+  ): Promise<ApiResponse<DeleteResponse>> {
+    return this.request<DeleteResponse>(
+      `/purchase-orders/${id}`,
+      "DELETE",
+      {},
+      true
+    );
+  }
+
+  // PO Item API Methods
+  async getPOItems(
+    page: number = 1,
+    perPage: number = 15,
+    filters?: {
+      search?: string;
+      po_id?: string | number;
+      material_id?: string | number;
+      min_qty?: number;
+      max_qty?: number;
+      min_price?: number;
+      max_price?: number;
+    }
+  ): Promise<ApiResponse<POItemsListResponse>> {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("per_page", perPage.toString());
+    if (filters?.search) params.append("search", filters.search);
+    if (filters?.po_id) params.append("po_id", filters.po_id.toString());
+    if (filters?.material_id) params.append("material_id", filters.material_id.toString());
+    if (filters?.min_qty) params.append("min_qty", filters.min_qty.toString());
+    if (filters?.max_qty) params.append("max_qty", filters.max_qty.toString());
+    if (filters?.min_price) params.append("min_price", filters.min_price.toString());
+    if (filters?.max_price) params.append("max_price", filters.max_price.toString());
+
+    return this.request<POItemsListResponse>(
+      `/po-items?${params.toString()}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getPOItem(id: string | number): Promise<ApiResponse<POItemResponse>> {
+    return this.request<POItemResponse>(
+      `/po-items/${id}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getPOItemsByPOId(poId: string | number): Promise<ApiResponse<POItemsListResponse>> {
+    return this.request<POItemsListResponse>(
+      `/po-items?po_id=${poId}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async createPOItem(
+    data: POItemCreateRequest
+  ): Promise<ApiResponse<POItemResponse>> {
+    return this.request<POItemResponse>(
+      "/po-items",
+      "POST",
+      data,
+      true
+    );
+  }
+
+  async updatePOItem(
+    id: string | number,
+    data: POItemUpdateRequest
+  ): Promise<ApiResponse<POItemResponse>> {
+    return this.request<POItemResponse>(
+      `/po-items/${id}`,
+      "PUT",
+      data,
+      true
+    );
+  }
+
+  async deletePOItem(
+    id: string | number
+  ): Promise<ApiResponse<DeleteResponse>> {
+    return this.request<DeleteResponse>(
+      `/po-items/${id}`,
+      "DELETE",
+      {},
+      true
+    );
+  }
+
   // Backup API Methods
   async getBackups(): Promise<ApiResponse<any>> {
     return this.request<any>("/backups", "GET", undefined, true);
@@ -1604,4 +1909,14 @@ export type {
   RFQItemResponse,
   RFQItemCreateRequest,
   RFQItemUpdateRequest,
+  PurchaseOrderData,
+  PurchaseOrdersListResponse,
+  PurchaseOrderResponse,
+  PurchaseOrderCreateRequest,
+  PurchaseOrderUpdateRequest,
+  POItemData,
+  POItemsListResponse,
+  POItemResponse,
+  POItemCreateRequest,
+  POItemUpdateRequest,
 };
