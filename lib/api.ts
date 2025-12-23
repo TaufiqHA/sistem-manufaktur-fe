@@ -518,6 +518,71 @@ interface RFQUpdateRequest {
   status?: "DRAFT" | "PO_CREATED";
 }
 
+interface RFQItemData {
+  id?: number;
+  rfq_id: string | number;
+  material_id: string | number;
+  name: string;
+  qty: number;
+  created_at?: string;
+  updated_at?: string;
+  rfq?: {
+    id: number;
+    code: string;
+    date: string;
+    description: string;
+    status: "DRAFT" | "PO_CREATED";
+  };
+  material?: {
+    id: number;
+    code: string;
+    name: string;
+    unit: string;
+    current_stock: number;
+    safety_stock: number;
+    price_per_unit: number;
+    category: string;
+  };
+}
+
+interface RFQItemsListResponse {
+  data: RFQItemData[];
+  links?: {
+    first?: string;
+    last?: string;
+    prev?: string;
+    next?: string;
+  };
+  meta?: {
+    current_page: number;
+    from: number;
+    last_page: number;
+    path: string;
+    per_page: number;
+    to: number;
+    total: number;
+  };
+}
+
+interface RFQItemResponse {
+  message?: string;
+  data: RFQItemData;
+}
+
+interface RFQItemCreateRequest {
+  rfq_id: string | number;
+  material_id: string | number;
+  name: string;
+  qty: number;
+}
+
+interface RFQItemUpdateRequest {
+  rfq_id?: string | number;
+  material_id?: string | number;
+  name?: string;
+  qty?: number;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -1311,6 +1376,54 @@ class ApiClient {
     return this.request<DeleteResponse>(`/rfqs/${id}`, "DELETE", {}, true);
   }
 
+  // RFQ Item API Methods
+  async getRFQItems(
+    page: number = 1,
+    perPage: number = 15
+  ): Promise<ApiResponse<RFQItemsListResponse>> {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("per_page", perPage.toString());
+    return this.request<RFQItemsListResponse>(
+      `/rfq-items?${params.toString()}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getRFQItem(id: string | number): Promise<ApiResponse<RFQItemResponse>> {
+    return this.request<RFQItemResponse>(`/rfq-items/${id}`, "GET", undefined, true);
+  }
+
+  async getRFQItemsByRFQId(rfqId: string | number): Promise<ApiResponse<RFQItemsListResponse>> {
+    return this.request<RFQItemsListResponse>(
+      `/rfq-items-by-rfq/${rfqId}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async createRFQItem(
+    data: RFQItemCreateRequest
+  ): Promise<ApiResponse<RFQItemResponse>> {
+    return this.request<RFQItemResponse>("/rfq-items", "POST", data, true);
+  }
+
+  async updateRFQItem(
+    id: string | number,
+    data: RFQItemUpdateRequest
+  ): Promise<ApiResponse<RFQItemResponse>> {
+    return this.request<RFQItemResponse>(`/rfq-items/${id}`, "PUT", data, true);
+  }
+
+  async deleteRFQItem(
+    id: string | number
+  ): Promise<ApiResponse<DeleteResponse>> {
+    return this.request<DeleteResponse>(`/rfq-items/${id}`, "DELETE", {}, true);
+  }
+
   // Backup API Methods
   async getBackups(): Promise<ApiResponse<any>> {
     return this.request<any>("/backups", "GET", undefined, true);
@@ -1426,4 +1539,8 @@ export type {
   RFQCreateRequest,
   RFQUpdateRequest,
   RFQItemData,
+  RFQItemsListResponse,
+  RFQItemResponse,
+  RFQItemCreateRequest,
+  RFQItemUpdateRequest,
 };

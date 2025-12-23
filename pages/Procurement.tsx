@@ -17,6 +17,11 @@ export const Procurement: React.FC = () => {
   const [isLoadingRfqs, setIsLoadingRfqs] = useState(false);
   const [rfqError, setRfqError] = useState<string | null>(null);
 
+  // API State - RFQ Items
+  const [rfqItemsByRfq, setRfqItemsByRfq] = useState<Record<string | number, ProcurementItem[]>>({});
+  const [isLoadingRfqItems, setIsLoadingRfqItems] = useState(false);
+  const [rfqItemsError, setRfqItemsError] = useState<string | null>(null);
+
   // API State - Materials
   const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
@@ -38,13 +43,37 @@ export const Procurement: React.FC = () => {
   // Receiving State
   const [bdData, setBdData] = useState({ description: '' });
 
-  // Fetch RFQs from API
+  // Fetch RFQ Items for a specific RFQ
+  const fetchRfqItems = async (rfqId: string | number) => {
+    try {
+      const response = await apiClient.getRFQItemsByRFQId(rfqId);
+      if (response.success && response.data) {
+        const itemsData = response.data.data || [];
+        if (Array.isArray(itemsData)) {
+          const convertedItems: ProcurementItem[] = itemsData.map(item => ({
+            materialId: typeof item.material_id === 'string' ? item.material_id : item.material_id.toString(),
+            name: item.name,
+            qty: item.qty
+          }));
+          setRfqItemsByRfq(prev => ({
+            ...prev,
+            [rfqId]: convertedItems
+          }));
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching RFQ items for RFQ ${rfqId}:`, error);
+    }
+  };
+
+  // Fetch RFQs from API on component mount
   useEffect(() => {
     const fetchRfqs = async () => {
       setIsLoadingRfqs(true);
       setRfqError(null);
       try {
         const response = await apiClient.getRFQs();
+
         if (response.success && response.data) {
           // Handle the response data structure
           const rfqData = response.data.data || response.data;
@@ -57,32 +86,35 @@ export const Procurement: React.FC = () => {
               date: rfq.date,
               description: rfq.description || '',
               status: rfq.status,
-              items: [] // API response doesn't include items, we'll fetch them separately if needed
+              items: [] // Will be populated from RFQ Items API
             }));
             setRfqs(convertedRfqs);
+
+            // Fetch items for each RFQ
+            convertedRfqs.forEach(rfq => {
+              fetchRfqItems(rfq.id);
+            });
           } else {
             // API returned data but not in expected format
             console.warn('API returned unexpected data structure:', response.data);
-            setRfqs(mockRfqs);
+            setRfqs([]);
           }
         } else {
           setRfqError(response.message || 'Failed to fetch RFQs');
-          // Fallback to mock data if API fails
-          setRfqs(mockRfqs);
+          setRfqs([]);
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to fetch RFQs';
         console.error('Error fetching RFQs:', errorMessage);
         setRfqError(errorMessage);
-        // Fallback to mock data
-        setRfqs(mockRfqs);
+        setRfqs([]);
       } finally {
         setIsLoadingRfqs(false);
       }
     };
 
     fetchRfqs();
-  }, [mockRfqs]);
+  }, []); // Empty dependency array - only fetch on mount
 
   // Fetch Materials from API
   useEffect(() => {
@@ -171,26 +203,66 @@ export const Procurement: React.FC = () => {
           return;
         }
 
-        // Create new RFQ object with items from the form
-        const newRfqData: RFQ = {
-          id: typeof rfqData.id === 'string' ? rfqData.id : rfqData.id.toString(),
-          code: rfqData.code,
-          date: rfqData.date,
-          description: rfqData.description || newRfq.description,
-          items: newRfq.items,
-          status: rfqData.status || 'DRAFT'
-        };
+        const rfqId = typeof rfqData.id === 'string' ? rfqData.id : rfqData.id.toString();
 
-        // Update local state
-        setRfqs(prev => [...prev, newRfqData]);
+        // Create RFQ Items via API
+        try {
+          setIsLoadingRfqItems(true);
+          const createdItems: ProcurementItem[] = [];
 
-        // Also add to store for consistency
-        addRFQ(newRfqData);
+          for (const item of newRfq.items) {
+            const itemResponse = await apiClient.createRFQItem({
+              rfq_id: rfqId,
+              material_id: item.materialId,
+              name: item.name,
+              qty: item.qty
+            });
 
-        setNewRfq({ description: '', items: [] });
-        setIsRfqModalOpen(false);
+            if (itemResponse.success && itemResponse.data) {
+              const itemData = itemResponse.data.data || itemResponse.data;
+              createdItems.push({
+                materialId: typeof itemData.material_id === 'string' ? itemData.material_id : itemData.material_id.toString(),
+                name: itemData.name,
+                qty: itemData.qty
+              });
+            } else {
+              console.warn(`Failed to create item ${item.name}:`, itemResponse.message);
+            }
+          }
 
-        alert(`RFQ ${rfqCode} berhasil dibuat!`);
+          // Store the created items in the local cache
+          setRfqItemsByRfq(prev => ({
+            ...prev,
+            [rfqId]: createdItems
+          }));
+
+          // Create new RFQ object with items from the form
+          const newRfqData: RFQ = {
+            id: rfqId,
+            code: rfqData.code,
+            date: rfqData.date,
+            description: rfqData.description || newRfq.description,
+            items: createdItems.length > 0 ? createdItems : newRfq.items,
+            status: rfqData.status || 'DRAFT'
+          };
+
+          // Update local state
+          setRfqs(prev => [...prev, newRfqData]);
+
+          // Also add to store for consistency
+          addRFQ(newRfqData);
+
+          setNewRfq({ description: '', items: [] });
+          setIsRfqModalOpen(false);
+
+          alert(`RFQ ${rfqCode} berhasil dibuat dengan ${createdItems.length} item!`);
+        } catch (itemError) {
+          const errorMessage = itemError instanceof Error ? itemError.message : 'Gagal membuat item RFQ';
+          console.error('Error creating RFQ items:', errorMessage);
+          alert(`RFQ dibuat namun ada error saat membuat item: ${errorMessage}`);
+        } finally {
+          setIsLoadingRfqItems(false);
+        }
       } else {
         alert(response.message || 'Gagal membuat RFQ');
       }
@@ -284,14 +356,28 @@ export const Procurement: React.FC = () => {
             <div className="bg-amber-50 border-2 border-amber-200 rounded-[32px] p-6 flex items-start gap-4">
               <div className="text-amber-600 font-black text-xl">⚠️</div>
               <div className="flex-1">
-                <p className="font-black text-amber-900 text-sm uppercase tracking-widest">API Integration Status</p>
+                <p className="font-black text-amber-900 text-sm uppercase tracking-widest">API Integration Status - RFQ</p>
                 <p className="text-amber-700 text-sm mt-1">{rfqError}</p>
+              </div>
+            </div>
+          )}
+          {rfqItemsError && (
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-[32px] p-6 flex items-start gap-4">
+              <div className="text-amber-600 font-black text-xl">⚠️</div>
+              <div className="flex-1">
+                <p className="font-black text-amber-900 text-sm uppercase tracking-widest">API Integration Status - RFQ Items</p>
+                <p className="text-amber-700 text-sm mt-1">{rfqItemsError}</p>
               </div>
             </div>
           )}
           {isLoadingRfqs && (
             <div className="bg-blue-50 border-2 border-blue-200 rounded-[32px] p-6 text-center">
               <p className="font-black text-blue-600 uppercase tracking-widest">Memuat RFQ dari API...</p>
+            </div>
+          )}
+          {isLoadingRfqItems && (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-[32px] p-6 text-center">
+              <p className="font-black text-blue-600 uppercase tracking-widest">Memuat RFQ Items dari API...</p>
             </div>
           )}
           <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
@@ -306,24 +392,31 @@ export const Procurement: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 font-bold">
-                 {rfqs.map(r => (
+                 {rfqs.map(r => {
+                   // Use items from the API cache first, then fall back to RFQ items, then store data
+                   const apiItems = rfqItemsByRfq[r.id] || [];
+                   const storeRfq = mockRfqs.find(m => m.id === r.id || m.code === r.code);
+                   const displayItems = apiItems.length > 0 ? apiItems : (r.items && r.items.length > 0 ? r.items : (storeRfq?.items || []));
+
+                   return (
                    <tr key={r.id} className="hover:bg-slate-50/50">
                      <td className="px-8 py-5">
                         <p className="text-blue-600 font-black">{r.code}</p>
                         <p className="text-[10px] text-slate-400 mt-1">{new Date(r.date).toLocaleDateString()}</p>
                      </td>
                      <td className="px-8 py-5 text-slate-600">{r.description || '-'}</td>
-                     <td className="px-8 py-5">{r.items.length} Macam Material</td>
+                     <td className="px-8 py-5">{displayItems.length} Macam Material</td>
                      <td className="px-8 py-5">
                         <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${r.status === 'PO_CREATED' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>{r.status}</span>
                      </td>
                      <td className="px-8 py-5 text-right">
                         {r.status === 'DRAFT' && (
-                          <button onClick={() => startCreatePO(r)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2 ml-auto">Buat PO <ChevronRight size={14}/></button>
+                          <button onClick={() => startCreatePO({ ...r, items: displayItems })} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2 ml-auto">Buat PO <ChevronRight size={14}/></button>
                         )}
                      </td>
                    </tr>
-                 ))}
+                   );
+                 })}
                  {rfqs.length === 0 && !isLoadingRfqs && <tr><td colSpan={5} className="py-20 text-center text-slate-300 font-black uppercase italic tracking-widest">Belum ada RFQ</td></tr>}
               </tbody>
             </table>
