@@ -148,7 +148,6 @@ interface MachinePersonnelData {
   shift?: string;
 }
 
-
 interface MachineData {
   id?: number;
   code: string;

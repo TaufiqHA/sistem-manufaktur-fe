@@ -1,11 +1,16 @@
-export type ProjectStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED';
-export type Shift = 'SHIFT_1' | 'SHIFT_2' | 'SHIFT_3';
+export type ProjectStatus =
+  | "PLANNED"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "ON_HOLD"
+  | "CANCELLED";
+export type Shift = "SHIFT_1" | "SHIFT_2" | "SHIFT_3";
 
 export interface Project {
   id: string;
   code: string;
   name: string;
-  customer: string; 
+  customer: string;
   startDate: string;
   deadline: string;
   status: ProjectStatus;
@@ -25,11 +30,28 @@ export interface Material {
   currentStock: number;
   safetyStock: number;
   pricePerUnit: number;
-  category: 'RAW' | 'FINISHING' | 'HARDWARE';
+  category: "RAW" | "FINISHING" | "HARDWARE";
 }
 
-export type ProcessStep = 'POTONG' | 'PLONG' | 'PRESS' | 'LASPEN' | 'LAS_MIG' | 'PHOSPHATING' | 'POWDER' | 'PACKING';
-export const ALL_STEPS: ProcessStep[] = ['POTONG', 'PLONG', 'PRESS', 'LASPEN', 'LAS_MIG', 'PHOSPHATING', 'POWDER', 'PACKING'];
+export type ProcessStep =
+  | "POTONG"
+  | "PLONG"
+  | "PRESS"
+  | "LASPEN"
+  | "LASMIG"
+  | "PHOSPHATING"
+  | "CAT"
+  | "PACKING";
+export const ALL_STEPS: ProcessStep[] = [
+  "POTONG",
+  "PLONG",
+  "PRESS",
+  "LASPEN",
+  "LASMIG",
+  "PHOSPHATING",
+  "CAT",
+  "PACKING",
+];
 
 export interface ItemStepConfig {
   step: ProcessStep;
@@ -39,10 +61,10 @@ export interface ItemStepConfig {
 
 export interface BomItem {
   id: string;
-  itemId: string; 
+  itemId: string;
   materialId: string;
-  quantityPerUnit: number; 
-  totalRequired: number; 
+  quantityPerUnit: number;
+  totalRequired: number;
   allocated: number;
   realized: number; // New: Actual consumed material
 }
@@ -62,12 +84,17 @@ export interface ProjectItem {
   workflow: ItemStepConfig[];
 }
 
-export type MachineStatus = 'IDLE' | 'RUNNING' | 'MAINTENANCE' | 'OFFLINE' | 'DOWNTIME';
+export type MachineStatus =
+  | "IDLE"
+  | "RUNNING"
+  | "MAINTENANCE"
+  | "OFFLINE"
+  | "DOWNTIME";
 
 export interface MachinePersonnel {
   id: string;
   name: string;
-  role: 'PIC' | 'OPERATOR';
+  role: "PIC" | "OPERATOR";
   shift: Shift;
 }
 
@@ -82,7 +109,12 @@ export interface Machine {
   isMaintenance: boolean; // New: Maintenance flag
 }
 
-export type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'PAUSED' | 'COMPLETED' | 'DOWNTIME';
+export type TaskStatus =
+  | "PENDING"
+  | "IN_PROGRESS"
+  | "PAUSED"
+  | "COMPLETED"
+  | "DOWNTIME";
 
 export interface Task {
   id: string;
@@ -112,18 +144,29 @@ export interface ProductionLog {
   defectQty: number;
   operator: string;
   timestamp: string;
-  type: 'OUTPUT' | 'DOWNTIME_START' | 'DOWNTIME_END';
+  type: "OUTPUT" | "DOWNTIME_START" | "DOWNTIME_END";
 }
 
-export type ModuleName = 'PROJECTS' | 'MATERIALS' | 'MACHINES' | 'USERS' | 'REPORTS' | 'DASHBOARD';
-export interface ModulePermission { view: boolean; create: boolean; edit: boolean; delete: boolean; }
+export type ModuleName =
+  | "PROJECTS"
+  | "MATERIALS"
+  | "MACHINES"
+  | "USERS"
+  | "REPORTS"
+  | "DASHBOARD";
+export interface ModulePermission {
+  view: boolean;
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+}
 export type PermissionMap = Record<ModuleName, ModulePermission>;
 
 export interface User {
   id: string;
   name: string;
   username: string;
-  role: 'ADMIN' | 'OPERATOR' | 'MANAGER';
+  role: "ADMIN" | "OPERATOR" | "MANAGER";
   permissions: PermissionMap;
 }
 
