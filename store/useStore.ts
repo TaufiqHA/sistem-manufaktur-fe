@@ -1,10 +1,12 @@
 import { create } from 'zustand';
-import { 
+import {
   Project, Material, ProjectItem, Machine, Task, User, UnitMaster, ProductionLog,
-  TaskStatus, ModuleName, ItemStepConfig, Shift, MachinePersonnel, ProcessStep
+  TaskStatus, ModuleName, ItemStepConfig, Shift, MachinePersonnel, ProcessStep,
+  Supplier, RFQ, PurchaseOrder, ReceivingGoods
 } from '../types';
-import { 
-  MOCK_PROJECTS, MOCK_MATERIALS, MOCK_ITEMS, MOCK_MACHINES, MOCK_TASKS, MOCK_USERS, MOCK_UNITS, MOCK_LOGS 
+import {
+  MOCK_PROJECTS, MOCK_MATERIALS, MOCK_ITEMS, MOCK_MACHINES, MOCK_TASKS, MOCK_USERS, MOCK_UNITS, MOCK_LOGS,
+  MOCK_SUPPLIERS, MOCK_RFQS, MOCK_POS, MOCK_RECEIVINGS
 } from '../lib/mockData';
 
 interface AppState {
@@ -17,6 +19,10 @@ interface AppState {
   users: User[];
   units: UnitMaster[];
   logs: ProductionLog[];
+  suppliers: Supplier[];
+  rfqs: RFQ[];
+  pos: PurchaseOrder[];
+  receivings: ReceivingGoods[];
 
   can: (action: 'view' | 'create' | 'edit' | 'delete', module: ModuleName) => boolean;
   login: (username: string) => boolean;
@@ -56,6 +62,12 @@ interface AppState {
   updateUser: (u: User) => void;
   deleteUser: (id: string) => void;
   downloadDatabase: () => void;
+
+  // Procurement methods
+  addSupplier: (s: Supplier) => void;
+  addRFQ: (r: RFQ) => void;
+  createPO: (p: PurchaseOrder) => void;
+  receiveGoods: (bd: ReceivingGoods) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -68,6 +80,10 @@ export const useStore = create<AppState>((set, get) => ({
   users: MOCK_USERS,
   units: MOCK_UNITS,
   logs: MOCK_LOGS,
+  suppliers: MOCK_SUPPLIERS,
+  rfqs: MOCK_RFQS,
+  pos: MOCK_POS,
+  receivings: MOCK_RECEIVINGS,
 
   can: (action, module) => {
     const user = get().currentUser;
@@ -287,4 +303,36 @@ export const useStore = create<AppState>((set, get) => ({
     a.click();
     URL.revokeObjectURL(url);
   },
+
+  addSupplier: (s) => set((state) => ({ suppliers: [...state.suppliers, s] })),
+
+  addRFQ: (r) => set((state) => ({ rfqs: [...state.rfqs, r] })),
+
+  createPO: (p) => set((state) => {
+    const updatedRfqs = state.rfqs.map(rfq =>
+      rfq.id === p.rfqId ? { ...rfq, status: 'PO_CREATED' as const } : rfq
+    );
+    return {
+      pos: [...state.pos, p],
+      rfqs: updatedRfqs
+    };
+  }),
+
+  receiveGoods: (bd) => set((state) => {
+    const updatedPos = state.pos.map(po =>
+      po.id === bd.poId ? { ...po, status: 'RECEIVED' as const } : po
+    );
+    const updatedMaterials = [...state.materials];
+    bd.items.forEach(item => {
+      const mat = updatedMaterials.find(m => m.id === item.materialId);
+      if (mat) {
+        mat.currentStock += item.qty;
+      }
+    });
+    return {
+      receivings: [...state.receivings, bd],
+      pos: updatedPos,
+      materials: updatedMaterials
+    };
+  }),
 }));

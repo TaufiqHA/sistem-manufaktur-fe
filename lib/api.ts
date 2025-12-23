@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://api.manufactur.id/api";
+const API_BASE_URL = "http://localhost:8000/api";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -470,6 +470,52 @@ interface BackupStatsResponse {
     processing: number;
     failed: number;
   };
+}
+
+interface RFQItemData {
+  materialId: string;
+  name: string;
+  qty: number;
+}
+
+interface RFQData {
+  id: number;
+  code: string;
+  date: string;
+  description: string;
+  status: "DRAFT" | "PO_CREATED";
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface RFQsListResponse {
+  message: string;
+  data: RFQData[];
+  pagination?: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+}
+
+interface RFQResponse {
+  message: string;
+  data: RFQData;
+}
+
+interface RFQCreateRequest {
+  code: string;
+  date: string;
+  description?: string;
+  status?: "DRAFT" | "PO_CREATED";
+}
+
+interface RFQUpdateRequest {
+  code?: string;
+  date?: string;
+  description?: string;
+  status?: "DRAFT" | "PO_CREATED";
 }
 
 class ApiClient {
@@ -1215,6 +1261,56 @@ class ApiClient {
     );
   }
 
+  // RFQ API Methods
+  async getRFQs(
+    page: number = 1,
+    perPage: number = 15,
+    filters?: {
+      search?: string;
+      status?: "DRAFT" | "PO_CREATED";
+      date?: string;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<ApiResponse<RFQsListResponse>> {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("per_page", perPage.toString());
+    if (filters?.search) params.append("search", filters.search);
+    if (filters?.status) params.append("status", filters.status);
+    if (filters?.date) params.append("date", filters.date);
+    if (filters?.start_date) params.append("start_date", filters.start_date);
+    if (filters?.end_date) params.append("end_date", filters.end_date);
+
+    return this.request<RFQsListResponse>(
+      `/rfqs?${params.toString()}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getRFQ(id: string | number): Promise<ApiResponse<RFQResponse>> {
+    return this.request<RFQResponse>(`/rfqs/${id}`, "GET", undefined, true);
+  }
+
+  async createRFQ(
+    data: RFQCreateRequest
+  ): Promise<ApiResponse<RFQResponse>> {
+    return this.request<RFQResponse>("/rfqs", "POST", data, true);
+  }
+
+  async updateRFQ(
+    id: string | number,
+    data: RFQUpdateRequest
+  ): Promise<ApiResponse<RFQResponse>> {
+    return this.request<RFQResponse>(`/rfqs/${id}`, "PUT", data, true);
+  }
+
+  async deleteRFQ(id: string | number): Promise<ApiResponse<DeleteResponse>> {
+    return this.request<DeleteResponse>(`/rfqs/${id}`, "DELETE", {}, true);
+  }
+
   // Backup API Methods
   async getBackups(): Promise<ApiResponse<any>> {
     return this.request<any>("/backups", "GET", undefined, true);
@@ -1324,4 +1420,10 @@ export type {
   BackupData,
   BackupsListResponse,
   BackupStatsResponse,
+  RFQData,
+  RFQsListResponse,
+  RFQResponse,
+  RFQCreateRequest,
+  RFQUpdateRequest,
+  RFQItemData,
 };

@@ -153,7 +153,8 @@ export type ModuleName =
   | "MACHINES"
   | "USERS"
   | "REPORTS"
-  | "DASHBOARD";
+  | "DASHBOARD"
+  | "PROCUREMENT";
 export interface ModulePermission {
   view: boolean;
   create: boolean;
@@ -173,4 +174,51 @@ export interface User {
 export interface UnitMaster {
   id: string;
   name: string;
+}
+
+// PROCUREMENT TYPES
+export interface Supplier {
+  id: string;
+  name: string;
+  contact: string;
+  address: string;
+}
+
+export interface ProcurementItem {
+  materialId: string;
+  name: string;
+  qty: number;
+  price?: number;
+  subtotal?: number;
+}
+
+export interface RFQ {
+  id: string;
+  code: string;
+  date: string;
+  description: string;
+  items: ProcurementItem[];
+  status: 'DRAFT' | 'PO_CREATED';
+}
+
+export interface PurchaseOrder {
+  id: string;
+  code: string;
+  rfqId?: string;
+  supplierId: string;
+  date: string;
+  description: string;
+  items: ProcurementItem[];
+  grandTotal: number;
+  status: 'OPEN' | 'RECEIVED';
+}
+
+export interface ReceivingGoods {
+  id: string;
+  code: string;
+  poId: string;
+  supplierId: string;
+  date: string;
+  description: string;
+  items: ProcurementItem[];
 }

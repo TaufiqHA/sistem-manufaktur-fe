@@ -1,4 +1,4 @@
-import { Project, Material, ProjectItem, Machine, Task, User, UnitMaster, ProductionLog, PermissionMap, ProcessStep } from '../types';
+import { Project, Material, ProjectItem, Machine, Task, User, UnitMaster, ProductionLog, PermissionMap, ProcessStep, Supplier, RFQ, PurchaseOrder, ReceivingGoods } from '../types';
 
 export const MOCK_UNITS: UnitMaster[] = [
   { id: 'u1', name: 'Unit' },
@@ -45,24 +45,39 @@ export const MOCK_ITEMS: ProjectItem[] = [
 export const MOCK_TASKS: Task[] = [];
 export const MOCK_LOGS: ProductionLog[] = [];
 
+export const MOCK_SUPPLIERS: Supplier[] = [
+  { id: 's1', name: 'PT Bahagia Steel', contact: '021-123456', address: 'Jl. Industri No. 10, Jakarta' },
+  { id: 's2', name: 'CV Maju Jaya', contact: '024-987654', address: 'Jl. Pergudangan No. 25, Semarang' },
+  { id: 's3', name: 'UD Bersama Sejahtera', contact: '031-555888', address: 'Jl. Industri No. 45, Surabaya' },
+];
+
+export const MOCK_RFQS: RFQ[] = [];
+
+export const MOCK_POS: PurchaseOrder[] = [];
+
+export const MOCK_RECEIVINGS: ReceivingGoods[] = [];
+
 const FULL_ACCESS = { view: true, create: true, edit: true, delete: true };
+const NO_ACCESS = { view: false, create: false, edit: false, delete: false };
 // Added REPORTS to ADMIN_PERMISSIONS to satisfy exhaustive Record mapping in PermissionMap
-export const ADMIN_PERMISSIONS: PermissionMap = { PROJECTS: FULL_ACCESS, MATERIALS: FULL_ACCESS, MACHINES: FULL_ACCESS, USERS: FULL_ACCESS, DASHBOARD: FULL_ACCESS, REPORTS: FULL_ACCESS };
+export const ADMIN_PERMISSIONS: PermissionMap = { PROJECTS: FULL_ACCESS, MATERIALS: FULL_ACCESS, MACHINES: FULL_ACCESS, USERS: FULL_ACCESS, DASHBOARD: FULL_ACCESS, REPORTS: FULL_ACCESS, PROCUREMENT: FULL_ACCESS };
+
+const OPERATOR_PERMISSIONS: PermissionMap = { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: NO_ACCESS, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false }, PROCUREMENT: NO_ACCESS };
 
 export const MOCK_USERS: User[] = [
   { id: 'u1', name: 'Super Admin', username: 'admin', role: 'ADMIN', permissions: ADMIN_PERMISSIONS },
-  { id: 'u2', name: 'Budi', username: 'budi', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u3', name: 'Joko', username: 'joko', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u4', name: 'Agus', username: 'agus', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u5', name: 'Dedi', username: 'dedi', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u6', name: 'Rudi', username: 'rudi', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u7', name: 'Asep', username: 'asep', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u8', name: 'Siti', username: 'siti', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u9', name: 'Rina', username: 'rina', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u10', name: 'Amin', username: 'amin', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u11', name: 'Anto', username: 'anto', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u12', name: 'Iwan', username: 'iwan', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u13', name: 'Edi', username: 'edi', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u14', name: 'Lia', username: 'lia', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
-  { id: 'u15', name: 'Tari', username: 'tari', role: 'OPERATOR', permissions: { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: { view: false, create: false, edit: false, delete: false }, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false } } },
+  { id: 'u2', name: 'Budi', username: 'budi', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u3', name: 'Joko', username: 'joko', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u4', name: 'Agus', username: 'agus', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u5', name: 'Dedi', username: 'dedi', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u6', name: 'Rudi', username: 'rudi', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u7', name: 'Asep', username: 'asep', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u8', name: 'Siti', username: 'siti', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u9', name: 'Rina', username: 'rina', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u10', name: 'Amin', username: 'amin', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u11', name: 'Anto', username: 'anto', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u12', name: 'Iwan', username: 'iwan', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u13', name: 'Edi', username: 'edi', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u14', name: 'Lia', username: 'lia', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
+  { id: 'u15', name: 'Tari', username: 'tari', role: 'OPERATOR', permissions: OPERATOR_PERMISSIONS },
 ];

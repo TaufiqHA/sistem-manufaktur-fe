@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-import { 
-  LayoutDashboard, FolderKanban, Factory, MonitorPlay, Settings, Users, PackageSearch, Menu, X, Wrench, LogOut, BarChart3
+import {
+  LayoutDashboard, FolderKanban, Factory, MonitorPlay, Settings, Users, PackageSearch, Menu, X, Wrench, LogOut, BarChart3, ShoppingCart
 } from 'lucide-react';
 import { ModuleName } from '../types';
 
@@ -13,6 +13,7 @@ interface LayoutProps {
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/', module: 'DASHBOARD' as ModuleName },
   { label: 'Projects', icon: FolderKanban, path: '/projects', module: 'PROJECTS' as ModuleName },
+  { label: 'Pengadaan', icon: ShoppingCart, path: '/procurement', module: 'PROCUREMENT' as ModuleName },
   { label: 'Master Mesin', icon: Wrench, path: '/machines', module: 'MACHINES' as ModuleName },
   { label: 'Materials', icon: PackageSearch, path: '/materials', module: 'MATERIALS' as ModuleName },
   { label: 'Operator Board', icon: Factory, path: '/machine-board', module: 'MACHINES' as ModuleName },
