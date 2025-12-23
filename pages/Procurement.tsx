@@ -2,15 +2,21 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { apiClient } from '../lib/api';
 import {
-  Plus, Search, ShoppingCart, FileText, Truck, Users, Trash2, ArrowRight, CheckCircle, Package, Clock, X, ChevronRight, Save, Coins, FileSpreadsheet
+  Plus, Search, ShoppingCart, FileText, Truck, Users, Trash2, ArrowRight, CheckCircle, Package, Clock, X, ChevronRight, Save, Coins, FileSpreadsheet, AlertCircle
 } from 'lucide-react';
-import { Supplier, RFQ, PurchaseOrder, ReceivingGoods, ProcurementItem, Material } from '../types';
+import { Supplier, RFQ, PurchaseOrder, ReceivingGoods, ProcurementItem, Material, SupplierData } from '../types';
 
 type TabType = 'SUPPLIERS' | 'RFQ' | 'PO' | 'RECEIVING';
 
 export const Procurement: React.FC = () => {
-  const { suppliers, rfqs: mockRfqs, pos, receivings, materials: storeMaterials, addSupplier, addRFQ, createPO, receiveGoods, can } = useStore();
+  const { suppliers: storeSuppliers, rfqs: mockRfqs, pos, receivings, materials: storeMaterials, addSupplier, addRFQ, createPO, receiveGoods, can } = useStore();
   const [activeTab, setActiveTab] = useState<TabType>('RFQ');
+
+  // API State - Suppliers
+  const [suppliers, setSuppliers] = useState<SupplierData[]>([]);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
+  const [suppliersError, setSuppliersError] = useState<string | null>(null);
+  const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
 
   // API State - RFQ
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
@@ -31,6 +37,11 @@ export const Procurement: React.FC = () => {
   const [isRfqModalOpen, setIsRfqModalOpen] = useState(false);
   const [isPoModalOpen, setIsPoModalOpen] = useState<RFQ | null>(null);
   const [isBdModalOpen, setIsBdModalOpen] = useState<PurchaseOrder | null>(null);
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+
+  // Supplier State
+  const [newSupplier, setNewSupplier] = useState({ name: '', contact: '', address: '' });
+  const [isSubmittingSupplier, setIsSubmittingSupplier] = useState(false);
 
   // RFQ State
   const [newRfq, setNewRfq] = useState({ description: '', items: [] as ProcurementItem[] });
@@ -42,6 +53,57 @@ export const Procurement: React.FC = () => {
 
   // Receiving State
   const [bdData, setBdData] = useState({ description: '' });
+
+  // Fetch Suppliers from API on component mount
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      setIsLoadingSuppliers(true);
+      setSuppliersError(null);
+      try {
+        const response = await apiClient.getSuppliers(1, 100, supplierSearchTerm || undefined);
+
+        if (response.success && response.data) {
+          const supplierData = response.data.data || response.data;
+
+          if (Array.isArray(supplierData)) {
+            setSuppliers(supplierData);
+          } else {
+            console.warn('API returned unexpected suppliers structure:', response.data);
+            setSuppliers(storeSuppliers.map(s => ({
+              id: s.id,
+              name: s.name,
+              contact: s.contact,
+              address: s.address
+            })));
+          }
+        } else {
+          setSuppliersError(response.message || 'Failed to fetch suppliers');
+          // Fallback to store suppliers if API fails
+          setSuppliers(storeSuppliers.map(s => ({
+            id: s.id,
+            name: s.name,
+            contact: s.contact,
+            address: s.address
+          })));
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch suppliers';
+        console.error('Error fetching suppliers:', errorMessage);
+        setSuppliersError(errorMessage);
+        // Fallback to store suppliers
+        setSuppliers(storeSuppliers.map(s => ({
+          id: s.id,
+          name: s.name,
+          contact: s.contact,
+          address: s.address
+        })));
+      } finally {
+        setIsLoadingSuppliers(false);
+      }
+    };
+
+    fetchSuppliers();
+  }, [supplierSearchTerm, storeSuppliers]);
 
   // Fetch RFQ Items for a specific RFQ
   const fetchRfqItems = async (rfqId: string | number) => {
@@ -167,6 +229,86 @@ export const Procurement: React.FC = () => {
   if (!can('view', 'PROCUREMENT')) return <div className="p-12 text-center text-slate-500 font-bold uppercase tracking-widest">Akses Ditolak.</div>;
 
   // Handlers
+  const submitSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSupplier.name.trim()) {
+      alert("Nama supplier harus diisi!");
+      return;
+    }
+
+    setIsSubmittingSupplier(true);
+    try {
+      const response = await apiClient.createSupplier({
+        name: newSupplier.name,
+        contact: newSupplier.contact || undefined,
+        address: newSupplier.address || undefined
+      });
+
+      if (response.success && response.data) {
+        const supplierData = response.data.data || response.data;
+
+        // Add to store for consistency
+        if (typeof supplierData.id === 'number' || typeof supplierData.id === 'string') {
+          addSupplier({
+            id: supplierData.id.toString(),
+            name: supplierData.name,
+            contact: supplierData.contact || '',
+            address: supplierData.address || ''
+          });
+        }
+
+        // Refresh suppliers list
+        const refreshResponse = await apiClient.getSuppliers(1, 100);
+        if (refreshResponse.success && refreshResponse.data) {
+          const refreshData = refreshResponse.data.data || refreshResponse.data;
+          if (Array.isArray(refreshData)) {
+            setSuppliers(refreshData);
+          }
+        }
+
+        setNewSupplier({ name: '', contact: '', address: '' });
+        setIsSupplierModalOpen(false);
+        alert(`Supplier ${newSupplier.name} berhasil ditambahkan!`);
+      } else {
+        alert(response.message || 'Gagal menambahkan supplier');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan';
+      console.error('Submit supplier error:', errorMessage, error);
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setIsSubmittingSupplier(false);
+    }
+  };
+
+  const deleteSupplier = async (supplierId: string | number, supplierName: string) => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus supplier ${supplierName}?`)) {
+      return;
+    }
+
+    try {
+      const response = await apiClient.deleteSupplier(supplierId);
+
+      if (response.success) {
+        // Refresh suppliers list
+        const refreshResponse = await apiClient.getSuppliers(1, 100);
+        if (refreshResponse.success && refreshResponse.data) {
+          const refreshData = refreshResponse.data.data || refreshResponse.data;
+          if (Array.isArray(refreshData)) {
+            setSuppliers(refreshData);
+          }
+        }
+        alert(`Supplier ${supplierName} berhasil dihapus!`);
+      } else {
+        alert(response.message || 'Gagal menghapus supplier');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan';
+      console.error('Delete supplier error:', errorMessage, error);
+      alert(`Error: ${errorMessage}`);
+    }
+  };
+
   const handleAddRfqItem = () => {
     const mat = materials.find(m => m.id === tempItem.materialId);
     if (mat && tempItem.qty > 0) {
@@ -443,7 +585,10 @@ export const Procurement: React.FC = () => {
                       <p className="text-emerald-600 font-black">{p.code}</p>
                       <p className="text-[10px] text-slate-400 mt-1">{new Date(p.date).toLocaleDateString()}</p>
                    </td>
-                   <td className="px-8 py-5 text-slate-800">{suppliers.find(s => s.id === p.supplierId)?.name}</td>
+                   <td className="px-8 py-5 text-slate-800">
+                      {suppliers.find(s => s.id?.toString() === p.supplierId?.toString())?.name ||
+                       storeSuppliers.find(s => s.id === p.supplierId)?.name}
+                   </td>
                    <td className="px-8 py-5 text-blue-600 font-black">Rp {p.grandTotal.toLocaleString()}</td>
                    <td className="px-8 py-5">
                       <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${p.status === 'RECEIVED' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{p.status}</span>
@@ -481,7 +626,10 @@ export const Procurement: React.FC = () => {
                       <p className="text-[10px] text-slate-400 mt-1">{new Date(bd.date).toLocaleDateString()}</p>
                    </td>
                    <td className="px-8 py-5 text-blue-600">{pos.find(p => p.id === bd.poId)?.code}</td>
-                   <td className="px-8 py-5">{suppliers.find(s => s.id === bd.supplierId)?.name}</td>
+                   <td className="px-8 py-5">
+                      {suppliers.find(s => s.id?.toString() === bd.supplierId?.toString())?.name ||
+                       storeSuppliers.find(s => s.id === bd.supplierId)?.name}
+                   </td>
                    <td className="px-8 py-5">
                       <p className="text-[10px] uppercase font-black text-slate-400">Total Macam: {bd.items.length}</p>
                       <p className="text-slate-800">{bd.items.reduce((acc, c) => acc + c.qty, 0)} Units</p>
@@ -498,25 +646,70 @@ export const Procurement: React.FC = () => {
       )}
 
       {activeTab === 'SUPPLIERS' && (
-        <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-black tracking-widest">
-              <tr>
-                <th className="px-8 py-5">Nama Supplier</th>
-                <th className="px-8 py-5">Kontak</th>
-                <th className="px-8 py-5">Alamat</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 font-bold">
-               {suppliers.map(s => (
-                 <tr key={s.id} className="hover:bg-slate-50/50">
-                   <td className="px-8 py-5 text-slate-900">{s.name}</td>
-                   <td className="px-8 py-5 text-slate-600">{s.contact}</td>
-                   <td className="px-8 py-5 text-slate-400 italic text-[11px]">{s.address}</td>
-                 </tr>
-               ))}
-            </tbody>
-          </table>
+        <div className="space-y-6">
+          {suppliersError && (
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-[32px] p-6 flex items-start gap-4">
+              <div className="text-amber-600 font-black text-xl">⚠️</div>
+              <div className="flex-1">
+                <p className="font-black text-amber-900 text-sm uppercase tracking-widest">API Integration Status - Suppliers</p>
+                <p className="text-amber-700 text-sm mt-1">{suppliersError}</p>
+              </div>
+            </div>
+          )}
+          {isLoadingSuppliers && (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-[32px] p-6 text-center">
+              <p className="font-black text-blue-600 uppercase tracking-widest">Memuat Supplier dari API...</p>
+            </div>
+          )}
+          <div className="flex justify-between items-center gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+              <input
+                type="text"
+                placeholder="Cari supplier..."
+                value={supplierSearchTerm}
+                onChange={(e) => setSupplierSearchTerm(e.target.value)}
+                className="w-full pl-12 pr-6 py-4 bg-white rounded-[24px] border-2 border-slate-100 font-black outline-none transition-all focus:border-blue-600"
+              />
+            </div>
+            <button
+              onClick={() => setIsSupplierModalOpen(true)}
+              className="bg-blue-600 text-white px-8 py-4 rounded-[24px] font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all flex items-center gap-2 whitespace-nowrap"
+            >
+              <Plus size={18}/> Tambah Supplier
+            </button>
+          </div>
+          <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-black tracking-widest">
+                <tr>
+                  <th className="px-8 py-5">Nama Supplier</th>
+                  <th className="px-8 py-5">Kontak</th>
+                  <th className="px-8 py-5">Alamat</th>
+                  <th className="px-8 py-5 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 font-bold">
+                 {suppliers.map(s => (
+                   <tr key={s.id} className="hover:bg-slate-50/50">
+                     <td className="px-8 py-5 text-slate-900">{s.name}</td>
+                     <td className="px-8 py-5 text-slate-600">{s.contact || '-'}</td>
+                     <td className="px-8 py-5 text-slate-400 italic text-[11px]">{s.address || '-'}</td>
+                     <td className="px-8 py-5 text-right">
+                       <button
+                         onClick={() => deleteSupplier(s.id, s.name)}
+                         className="text-red-400 hover:text-red-600 transition-all"
+                         title="Hapus supplier"
+                       >
+                         <Trash2 size={18}/>
+                       </button>
+                     </td>
+                   </tr>
+                 ))}
+                 {suppliers.length === 0 && !isLoadingSuppliers && <tr><td colSpan={4} className="py-20 text-center text-slate-300 font-black uppercase italic tracking-widest">Belum ada supplier</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -677,11 +870,14 @@ export const Procurement: React.FC = () => {
                <div className="w-24 h-24 bg-blue-100 text-blue-600 rounded-[32px] flex items-center justify-center mx-auto mb-6 shadow-xl"><Truck size={48}/></div>
                <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Konfirmasi Barang Datang</h3>
                <p className="text-slate-500 font-bold uppercase tracking-widest text-xs italic">Menarik data dari: {isBdModalOpen.code}</p>
-               
+
                <div className="bg-slate-50 p-8 rounded-[40px] border border-slate-100 text-left space-y-6">
                    <div className="flex justify-between items-center border-b pb-4">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Supplier Pengirim</span>
-                      <span className="font-black text-slate-900">{suppliers.find(s => s.id === isBdModalOpen.supplierId)?.name}</span>
+                      <span className="font-black text-slate-900">
+                        {suppliers.find(s => s.id?.toString() === isBdModalOpen.supplierId?.toString())?.name ||
+                         storeSuppliers.find(s => s.id === isBdModalOpen.supplierId)?.name}
+                      </span>
                    </div>
                    <div className="space-y-4">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mb-4">Item yang Diterima (Sesuai PO)</p>
@@ -703,6 +899,70 @@ export const Procurement: React.FC = () => {
                   <button onClick={submitBD} className="w-full py-7 bg-blue-600 text-white rounded-[32px] font-black text-xl shadow-2xl shadow-blue-100 hover:bg-blue-700 transition-all">KONFIRMASI PENERIMAAN BARANG</button>
                   <button onClick={() => setIsBdModalOpen(null)} className="text-slate-400 font-black uppercase text-[10px] tracking-widest py-2 hover:text-slate-600 transition-all">Tutup</button>
                </div>
+           </div>
+        </div>
+      )}
+
+      {/* MODAL TAMBAH SUPPLIER */}
+      {isSupplierModalOpen && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
+           <div className="bg-white rounded-[48px] w-full max-w-2xl flex flex-col overflow-hidden shadow-2xl">
+              <div className="p-10 border-b bg-slate-50 flex justify-between items-center">
+                 <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Tambah Supplier Baru</h2>
+                 <button onClick={() => setIsSupplierModalOpen(false)} className="p-4 hover:bg-slate-200 rounded-full transition-all"><X size={28}/></button>
+              </div>
+              <form onSubmit={submitSupplier} className="flex-1 overflow-y-auto p-10 space-y-6">
+                 <div className="space-y-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nama Supplier *</label>
+                    <input
+                      type="text"
+                      className="w-full p-6 bg-slate-50 rounded-[28px] font-black text-lg outline-none border-2 border-slate-100 focus:border-blue-600 transition-all"
+                      placeholder="Contoh: PT ABC Supplier"
+                      value={newSupplier.name}
+                      onChange={e => setNewSupplier({...newSupplier, name: e.target.value})}
+                      required
+                    />
+                 </div>
+
+                 <div className="space-y-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kontak</label>
+                    <input
+                      type="text"
+                      className="w-full p-6 bg-slate-50 rounded-[28px] font-black text-lg outline-none border-2 border-slate-100 focus:border-blue-600 transition-all"
+                      placeholder="Contoh: 081234567890"
+                      value={newSupplier.contact}
+                      onChange={e => setNewSupplier({...newSupplier, contact: e.target.value})}
+                    />
+                 </div>
+
+                 <div className="space-y-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alamat</label>
+                    <textarea
+                      className="w-full p-6 bg-slate-50 rounded-[28px] font-black text-lg outline-none border-2 border-slate-100 focus:border-blue-600 transition-all resize-none"
+                      placeholder="Contoh: Jl. Test No. 123, Jakarta"
+                      rows={4}
+                      value={newSupplier.address}
+                      onChange={e => setNewSupplier({...newSupplier, address: e.target.value})}
+                    />
+                 </div>
+
+                 <div className="pt-6 border-t flex gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setIsSupplierModalOpen(false)}
+                      className="flex-1 px-6 py-4 rounded-[28px] font-black text-sm uppercase tracking-widest text-slate-600 hover:bg-slate-100 transition-all"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingSupplier}
+                      className={`flex-1 px-6 py-4 rounded-[28px] font-black text-sm uppercase tracking-widest shadow-xl transition-all flex items-center justify-center gap-2 ${isSubmittingSupplier ? 'bg-slate-400 text-white cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                    >
+                      <Save size={16}/> {isSubmittingSupplier ? 'Menyimpan...' : 'Simpan Supplier'}
+                    </button>
+                 </div>
+              </form>
            </div>
         </div>
       )}

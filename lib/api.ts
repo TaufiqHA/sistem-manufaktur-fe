@@ -1326,6 +1326,62 @@ class ApiClient {
     );
   }
 
+  // Supplier API Methods
+  async getSuppliers(
+    page: number = 1,
+    perPage: number = 15,
+    search?: string,
+    name?: string,
+    contact?: string
+  ): Promise<ApiResponse<SuppliersListResponse>> {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("per_page", perPage.toString());
+    if (search) params.append("search", search);
+    if (name) params.append("name", name);
+    if (contact) params.append("contact", contact);
+
+    return this.request<SuppliersListResponse>(
+      `/suppliers?${params.toString()}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getSupplier(id: string | number): Promise<ApiResponse<SupplierResponse>> {
+    return this.request<SupplierResponse>(
+      `/suppliers/${id}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async createSupplier(
+    data: SupplierCreateRequest
+  ): Promise<ApiResponse<SupplierResponse>> {
+    return this.request<SupplierResponse>("/suppliers", "POST", data, true);
+  }
+
+  async updateSupplier(
+    id: string | number,
+    data: SupplierUpdateRequest
+  ): Promise<ApiResponse<SupplierResponse>> {
+    return this.request<SupplierResponse>(
+      `/suppliers/${id}`,
+      "PUT",
+      data,
+      true
+    );
+  }
+
+  async deleteSupplier(
+    id: string | number
+  ): Promise<ApiResponse<DeleteResponse>> {
+    return this.request<DeleteResponse>(`/suppliers/${id}`, "DELETE", {}, true);
+  }
+
   // RFQ API Methods
   async getRFQs(
     page: number = 1,
@@ -1533,6 +1589,11 @@ export type {
   BackupData,
   BackupsListResponse,
   BackupStatsResponse,
+  SupplierData,
+  SuppliersListResponse,
+  SupplierResponse,
+  SupplierCreateRequest,
+  SupplierUpdateRequest,
   RFQData,
   RFQsListResponse,
   RFQResponse,

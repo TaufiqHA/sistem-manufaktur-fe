@@ -177,6 +177,45 @@ export interface UnitMaster {
 }
 
 // PROCUREMENT TYPES
+export interface SupplierData {
+  id?: number | string;
+  name: string;
+  contact?: string;
+  address?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SuppliersListResponse {
+  data: SupplierData[];
+  pagination?: {
+    total: number;
+    per_page: number;
+    current_page: number;
+    last_page: number;
+    first_page_url?: string;
+    last_page_url?: string;
+    next_page_url?: string | null;
+    prev_page_url?: string | null;
+  };
+}
+
+export interface SupplierResponse {
+  data: SupplierData;
+}
+
+export interface SupplierCreateRequest {
+  name: string;
+  contact?: string;
+  address?: string;
+}
+
+export interface SupplierUpdateRequest {
+  name?: string;
+  contact?: string;
+  address?: string;
+}
+
 export interface Supplier {
   id: string;
   name: string;
