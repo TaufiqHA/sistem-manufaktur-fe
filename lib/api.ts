@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:8000/api";
+const API_BASE_URL = "https://api.manufactur.id/api";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -1644,7 +1644,9 @@ class ApiClient {
     );
   }
 
-  async getSupplier(id: string | number): Promise<ApiResponse<SupplierResponse>> {
+  async getSupplier(
+    id: string | number
+  ): Promise<ApiResponse<SupplierResponse>> {
     return this.request<SupplierResponse>(
       `/suppliers/${id}`,
       "GET",
@@ -1710,9 +1712,7 @@ class ApiClient {
     return this.request<RFQResponse>(`/rfqs/${id}`, "GET", undefined, true);
   }
 
-  async createRFQ(
-    data: RFQCreateRequest
-  ): Promise<ApiResponse<RFQResponse>> {
+  async createRFQ(data: RFQCreateRequest): Promise<ApiResponse<RFQResponse>> {
     return this.request<RFQResponse>("/rfqs", "POST", data, true);
   }
 
@@ -1744,10 +1744,17 @@ class ApiClient {
   }
 
   async getRFQItem(id: string | number): Promise<ApiResponse<RFQItemResponse>> {
-    return this.request<RFQItemResponse>(`/rfq-items/${id}`, "GET", undefined, true);
+    return this.request<RFQItemResponse>(
+      `/rfq-items/${id}`,
+      "GET",
+      undefined,
+      true
+    );
   }
 
-  async getRFQItemsByRFQId(rfqId: string | number): Promise<ApiResponse<RFQItemsListResponse>> {
+  async getRFQItemsByRFQId(
+    rfqId: string | number
+  ): Promise<ApiResponse<RFQItemsListResponse>> {
     return this.request<RFQItemsListResponse>(
       `/rfq-items-by-rfq/${rfqId}`,
       "GET",
@@ -1790,7 +1797,8 @@ class ApiClient {
     params.append("per_page", perPage.toString());
     if (filters?.search) params.append("search", filters.search);
     if (filters?.status) params.append("status", filters.status);
-    if (filters?.supplier_id) params.append("supplier_id", filters.supplier_id.toString());
+    if (filters?.supplier_id)
+      params.append("supplier_id", filters.supplier_id.toString());
 
     return this.request<PurchaseOrdersListResponse>(
       `/purchase-orders?${params.toString()}`,
@@ -1800,7 +1808,9 @@ class ApiClient {
     );
   }
 
-  async getPurchaseOrder(id: string | number): Promise<ApiResponse<PurchaseOrderResponse>> {
+  async getPurchaseOrder(
+    id: string | number
+  ): Promise<ApiResponse<PurchaseOrderResponse>> {
     return this.request<PurchaseOrderResponse>(
       `/purchase-orders/${id}`,
       "GET",
@@ -1862,11 +1872,14 @@ class ApiClient {
     params.append("per_page", perPage.toString());
     if (filters?.search) params.append("search", filters.search);
     if (filters?.po_id) params.append("po_id", filters.po_id.toString());
-    if (filters?.material_id) params.append("material_id", filters.material_id.toString());
+    if (filters?.material_id)
+      params.append("material_id", filters.material_id.toString());
     if (filters?.min_qty) params.append("min_qty", filters.min_qty.toString());
     if (filters?.max_qty) params.append("max_qty", filters.max_qty.toString());
-    if (filters?.min_price) params.append("min_price", filters.min_price.toString());
-    if (filters?.max_price) params.append("max_price", filters.max_price.toString());
+    if (filters?.min_price)
+      params.append("min_price", filters.min_price.toString());
+    if (filters?.max_price)
+      params.append("max_price", filters.max_price.toString());
 
     return this.request<POItemsListResponse>(
       `/po-items?${params.toString()}`,
@@ -1885,7 +1898,9 @@ class ApiClient {
     );
   }
 
-  async getPOItemsByPOId(poId: string | number): Promise<ApiResponse<POItemsListResponse>> {
+  async getPOItemsByPOId(
+    poId: string | number
+  ): Promise<ApiResponse<POItemsListResponse>> {
     return this.request<POItemsListResponse>(
       `/po-items?po_id=${poId}`,
       "GET",
@@ -1897,35 +1912,20 @@ class ApiClient {
   async createPOItem(
     data: POItemCreateRequest
   ): Promise<ApiResponse<POItemResponse>> {
-    return this.request<POItemResponse>(
-      "/po-items",
-      "POST",
-      data,
-      true
-    );
+    return this.request<POItemResponse>("/po-items", "POST", data, true);
   }
 
   async updatePOItem(
     id: string | number,
     data: POItemUpdateRequest
   ): Promise<ApiResponse<POItemResponse>> {
-    return this.request<POItemResponse>(
-      `/po-items/${id}`,
-      "PUT",
-      data,
-      true
-    );
+    return this.request<POItemResponse>(`/po-items/${id}`, "PUT", data, true);
   }
 
   async deletePOItem(
     id: string | number
   ): Promise<ApiResponse<DeleteResponse>> {
-    return this.request<DeleteResponse>(
-      `/po-items/${id}`,
-      "DELETE",
-      {},
-      true
-    );
+    return this.request<DeleteResponse>(`/po-items/${id}`, "DELETE", {}, true);
   }
 
   // Receiving Goods API Methods
