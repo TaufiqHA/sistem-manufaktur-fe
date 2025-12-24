@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { apiClient, POItemData, PurchaseOrderData } from '../lib/api';
+import { apiClient, POItemData, PurchaseOrderData, ReceivingGoodsData, ReceivingItemData } from '../lib/api';
 import {
   Plus, Search, ShoppingCart, FileText, Truck, Users, Trash2, ArrowRight, CheckCircle, Package, Clock, X, ChevronRight, Save, Coins, FileSpreadsheet, AlertCircle
 } from 'lucide-react';
@@ -45,6 +45,17 @@ export const Procurement: React.FC = () => {
   const [isLoadingPoItems, setIsLoadingPoItems] = useState(false);
   const [poItemsError, setPoItemsError] = useState<string | null>(null);
   const poItemsFetchedRef = React.useRef<Set<string>>(new Set());
+
+  // API State - Receiving Goods
+  const [receivingGoodsList, setReceivingGoodsList] = useState<ReceivingGoodsData[]>([]);
+  const [isLoadingReceivingGoods, setIsLoadingReceivingGoods] = useState(false);
+  const [receivingGoodsError, setReceivingGoodsError] = useState<string | null>(null);
+
+  // API State - Receiving Items
+  const [receivingItemsByReceiving, setReceivingItemsByReceiving] = useState<Record<string | number, ReceivingItemData[]>>({});
+  const [isLoadingReceivingItems, setIsLoadingReceivingItems] = useState(false);
+  const [receivingItemsError, setReceivingItemsError] = useState<string | null>(null);
+  const receivingItemsFetchedRef = React.useRef<Set<string>>(new Set());
 
   // Modals
   const [isRfqModalOpen, setIsRfqModalOpen] = useState(false);
@@ -357,6 +368,85 @@ export const Procurement: React.FC = () => {
       fetchPoItems(po.id || '');
     });
   }, [purchaseOrders, activeTab, fetchPoItems]);
+
+  // Fetch Receiving Items for a specific Receiving Good
+  const fetchReceivingItems = React.useCallback(async (receivingId: string | number) => {
+    const receivingIdStr = receivingId.toString();
+
+    // Don't fetch if already fetched
+    if (receivingItemsFetchedRef.current.has(receivingIdStr)) {
+      return;
+    }
+
+    try {
+      const response = await apiClient.getReceivingItemsByReceivingId(receivingId);
+
+      if (response.success && response.data) {
+        // The endpoint returns items directly as an array in the data field
+        let itemsData: ReceivingItemData[] = [];
+
+        if (Array.isArray(response.data)) {
+          itemsData = response.data;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          itemsData = response.data.data;
+        }
+
+        if (itemsData.length > 0) {
+          setReceivingItemsByReceiving(prev => ({
+            ...prev,
+            [receivingIdStr]: itemsData
+          }));
+        }
+      }
+
+      // Mark as fetched in ref
+      receivingItemsFetchedRef.current.add(receivingIdStr);
+    } catch (error) {
+      console.error(`Error fetching receiving items for receiving ${receivingId}:`, error);
+      // Mark as fetched to prevent retry loops
+      receivingItemsFetchedRef.current.add(receivingIdStr);
+    }
+  }, []);
+
+  // Fetch Receiving Goods only when RECEIVING tab is active
+  useEffect(() => {
+    if (activeTab !== 'RECEIVING') return;
+
+    const fetchReceivingGoods = async () => {
+      setIsLoadingReceivingGoods(true);
+      setReceivingGoodsError(null);
+      try {
+        const response = await apiClient.getReceivingGoods(1, 100);
+
+        if (response.success && response.data) {
+          const goodsData = response.data.data || [];
+
+          if (Array.isArray(goodsData)) {
+            setReceivingGoodsList(goodsData);
+
+            // Fetch items for each receiving good
+            goodsData.forEach(bd => {
+              fetchReceivingItems(bd.id || '');
+            });
+          } else {
+            setReceivingGoodsList([]);
+          }
+        } else {
+          setReceivingGoodsError(response.message || 'Failed to fetch receiving goods');
+          setReceivingGoodsList([]);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch receiving goods';
+        console.error('Error fetching receiving goods:', errorMessage);
+        setReceivingGoodsError(errorMessage);
+        setReceivingGoodsList([]);
+      } finally {
+        setIsLoadingReceivingGoods(false);
+      }
+    };
+
+    fetchReceivingGoods();
+  }, [activeTab, fetchReceivingItems]);
 
   if (!can('view', 'PROCUREMENT')) return <div className="p-12 text-center text-slate-500 font-bold uppercase tracking-widest">Akses Ditolak.</div>;
 
@@ -681,21 +771,114 @@ export const Procurement: React.FC = () => {
     setIsBdModalOpen(po);
   };
 
-  const submitBD = (e: React.FormEvent) => {
+  const submitBD = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isBdModalOpen) return;
-    const bd: ReceivingGoods = {
-      id: `bd-${Date.now()}`,
-      code: `BD-${Math.floor(Math.random() * 9000) + 1000}`,
-      poId: isBdModalOpen.id,
-      supplierId: isBdModalOpen.supplierId,
-      date: new Date().toISOString(),
-      description: bdData.description,
-      items: isBdModalOpen.items
-    };
-    receiveGoods(bd);
-    setIsBdModalOpen(null);
-    setActiveTab('RECEIVING');
+
+    try {
+      setIsSubmittingRfq(true);
+      const bdCode = `BD-${Math.floor(Math.random() * 9000) + 1000}`;
+
+      // Create Receiving Goods via API
+      const bdResponse = await apiClient.createReceivingGoods({
+        code: bdCode,
+        po_id: isBdModalOpen.id ? (typeof isBdModalOpen.id === 'string' ? parseInt(isBdModalOpen.id) : isBdModalOpen.id) : undefined,
+        supplier_id: isBdModalOpen.supplierId ? (typeof isBdModalOpen.supplierId === 'string' ? parseInt(isBdModalOpen.supplierId) : isBdModalOpen.supplierId) : undefined,
+        date: new Date().toISOString(),
+        description: bdData.description
+      });
+
+      if (bdResponse.success && bdResponse.data) {
+        const bdDataFromApi = bdResponse.data;
+        const bdId = bdDataFromApi.id;
+
+        // Create Receiving Items via API
+        try {
+          const createdItems: ReceivingItemData[] = [];
+
+          for (const item of isBdModalOpen.items) {
+            const itemResponse = await apiClient.createReceivingItem({
+              receiving_id: bdId!,
+              material_id: item.materialId ? (typeof item.materialId === 'string' ? parseInt(item.materialId) : item.materialId) : undefined,
+              name: item.name,
+              qty: item.qty
+            });
+
+            if (itemResponse.success && itemResponse.data) {
+              createdItems.push(itemResponse.data);
+            } else {
+              console.warn(`Failed to create receiving item ${item.name}:`, itemResponse.message);
+            }
+          }
+
+          // Store the created items in the local cache with string key for consistency
+          const bdIdStr = bdId?.toString() || '';
+          setReceivingItemsByReceiving(prev => ({
+            ...prev,
+            [bdIdStr]: createdItems
+          }));
+
+          // Update material stock for each receiving item
+          try {
+            let stockUpdateCount = 0;
+            for (const item of isBdModalOpen.items) {
+              const materialId = item.materialId ? (typeof item.materialId === 'string' ? parseInt(item.materialId) : item.materialId) : null;
+              if (materialId && item.qty > 0) {
+                const stockResponse = await apiClient.updateMaterialStock(
+                  materialId,
+                  item.qty,
+                  'add'
+                );
+                if (stockResponse.success) {
+                  stockUpdateCount++;
+                  console.log(`Stock updated for material ${item.name}: +${item.qty}`);
+                } else {
+                  console.warn(`Failed to update stock for material ${item.name}:`, stockResponse.message);
+                }
+              }
+            }
+            console.log(`Stock updated for ${stockUpdateCount} materials`);
+          } catch (stockError) {
+            console.warn('Error updating material stock:', stockError);
+          }
+
+          // Update local receiving goods list
+          setReceivingGoodsList(prev => [...prev, bdDataFromApi]);
+
+          // Also add to store for consistency
+          const bd: ReceivingGoods = {
+            id: bdId?.toString() || `bd-${Date.now()}`,
+            code: bdCode,
+            poId: isBdModalOpen.id,
+            supplierId: isBdModalOpen.supplierId,
+            date: new Date().toISOString(),
+            description: bdData.description,
+            items: isBdModalOpen.items
+          };
+          receiveGoods(bd);
+
+          // Reset form data
+          setBdData({ description: '' });
+          setIsBdModalOpen(null);
+          setActiveTab('RECEIVING');
+
+          alert(`Penerimaan Barang ${bdCode} berhasil dibuat dengan ${createdItems.length} item dan stok material telah diperbarui!`);
+        } catch (itemError) {
+          const errorMessage = itemError instanceof Error ? itemError.message : 'Gagal membuat receiving items';
+          console.error('Error creating receiving items:', errorMessage);
+          alert(`Barang Datang dibuat namun ada error saat membuat item: ${errorMessage}`);
+          setIsBdModalOpen(null);
+        }
+      } else {
+        alert(bdResponse.message || 'Gagal membuat penerimaan barang');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan';
+      console.error('Submit BD error:', errorMessage, error);
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setIsSubmittingRfq(false);
+    }
   };
 
   return (
@@ -919,41 +1102,95 @@ export const Procurement: React.FC = () => {
       )}
 
       {activeTab === 'RECEIVING' && (
-        <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-black tracking-widest">
-              <tr>
-                <th className="px-8 py-5">Kode BD / Tanggal</th>
-                <th className="px-8 py-5">Kode PO</th>
-                <th className="px-8 py-5">Supplier</th>
-                <th className="px-8 py-5">Item Diterima</th>
-                <th className="px-8 py-5 text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 font-bold">
-               {receivings.map(bd => (
-                 <tr key={bd.id} className="hover:bg-slate-50/50">
-                   <td className="px-8 py-5">
-                      <p className="text-slate-900 font-black">{bd.code}</p>
-                      <p className="text-[10px] text-slate-400 mt-1">{new Date(bd.date).toLocaleDateString()}</p>
-                   </td>
-                   <td className="px-8 py-5 text-blue-600">{pos.find(p => p.id === bd.poId)?.code}</td>
-                   <td className="px-8 py-5">
-                      {suppliers.find(s => s.id?.toString() === bd.supplierId?.toString())?.name ||
-                       storeSuppliers.find(s => s.id === bd.supplierId)?.name}
-                   </td>
-                   <td className="px-8 py-5">
-                      <p className="text-[10px] uppercase font-black text-slate-400">Total Macam: {bd.items.length}</p>
-                      <p className="text-slate-800">{bd.items.reduce((acc, c) => acc + c.qty, 0)} Units</p>
-                   </td>
-                   <td className="px-8 py-5 text-right">
-                      <div className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-xl text-[8px] font-black uppercase tracking-widest inline-flex items-center gap-1"><CheckCircle size={10}/> Stok Diupdate</div>
-                   </td>
-                 </tr>
-               ))}
-               {receivings.length === 0 && <tr><td colSpan={5} className="py-20 text-center text-slate-300 font-black uppercase italic tracking-widest">Belum ada pengiriman barang datang</td></tr>}
-            </tbody>
-          </table>
+        <div className="space-y-6">
+          {receivingGoodsError && (
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-[32px] p-6 flex items-start gap-4">
+              <div className="text-amber-600 font-black text-xl">⚠️</div>
+              <div className="flex-1">
+                <p className="font-black text-amber-900 text-sm uppercase tracking-widest">API Integration Status - Receiving Goods</p>
+                <p className="text-amber-700 text-sm mt-1">{receivingGoodsError}</p>
+              </div>
+            </div>
+          )}
+          {receivingItemsError && (
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-[32px] p-6 flex items-start gap-4">
+              <div className="text-amber-600 font-black text-xl">⚠️</div>
+              <div className="flex-1">
+                <p className="font-black text-amber-900 text-sm uppercase tracking-widest">API Integration Status - Receiving Items</p>
+                <p className="text-amber-700 text-sm mt-1">{receivingItemsError}</p>
+              </div>
+            </div>
+          )}
+          {isLoadingReceivingGoods && (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-[32px] p-6 text-center">
+              <p className="font-black text-blue-600 uppercase tracking-widest">Memuat Receiving Goods dari API...</p>
+            </div>
+          )}
+          {isLoadingReceivingItems && (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-[32px] p-6 text-center">
+              <p className="font-black text-blue-600 uppercase tracking-widest">Memuat Receiving Items dari API...</p>
+            </div>
+          )}
+          <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-black tracking-widest">
+                <tr>
+                  <th className="px-8 py-5">Kode BD / Tanggal</th>
+                  <th className="px-8 py-5">Kode PO</th>
+                  <th className="px-8 py-5">Supplier</th>
+                  <th className="px-8 py-5">Item Diterima</th>
+                  <th className="px-8 py-5 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 font-bold">
+                 {/* Display API data first, then fall back to store data */}
+                 {receivingGoodsList.length > 0 ? receivingGoodsList.map(bd => {
+                   const bdIdStr = bd.id?.toString() || '';
+                   const apiItems = (bdIdStr && receivingItemsByReceiving[bdIdStr]) || [];
+
+                   return (
+                   <tr key={bd.id} className="hover:bg-slate-50/50">
+                     <td className="px-8 py-5">
+                        <p className="text-slate-900 font-black">{bd.code}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">{new Date(bd.date).toLocaleDateString()}</p>
+                     </td>
+                     <td className="px-8 py-5 text-blue-600">{bd.purchase_order?.code || '-'}</td>
+                     <td className="px-8 py-5">
+                        {bd.supplier?.name || '-'}
+                     </td>
+                     <td className="px-8 py-5">
+                        <p className="text-[10px] uppercase font-black text-slate-400">Total Macam: {apiItems.length > 0 ? apiItems.length : '-'}</p>
+                        <p className="text-slate-800">{apiItems.length > 0 ? apiItems.reduce((acc, c) => acc + c.qty, 0) : '-'} Units</p>
+                     </td>
+                     <td className="px-8 py-5 text-right">
+                        <div className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-xl text-[8px] font-black uppercase tracking-widest inline-flex items-center gap-1"><CheckCircle size={10}/> Stok Diupdate</div>
+                     </td>
+                   </tr>
+                   );
+                 }) : receivings.map(bd => (
+                   <tr key={bd.id} className="hover:bg-slate-50/50">
+                     <td className="px-8 py-5">
+                        <p className="text-slate-900 font-black">{bd.code}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">{new Date(bd.date).toLocaleDateString()}</p>
+                     </td>
+                     <td className="px-8 py-5 text-blue-600">{pos.find(p => p.id === bd.poId)?.code}</td>
+                     <td className="px-8 py-5">
+                        {suppliers.find(s => s.id?.toString() === bd.supplierId?.toString())?.name ||
+                         storeSuppliers.find(s => s.id === bd.supplierId)?.name}
+                     </td>
+                     <td className="px-8 py-5">
+                        <p className="text-[10px] uppercase font-black text-slate-400">Total Macam: {bd.items.length}</p>
+                        <p className="text-slate-800">{bd.items.reduce((acc, c) => acc + c.qty, 0)} Units</p>
+                     </td>
+                     <td className="px-8 py-5 text-right">
+                        <div className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-xl text-[8px] font-black uppercase tracking-widest inline-flex items-center gap-1"><CheckCircle size={10}/> Stok Diupdate</div>
+                     </td>
+                   </tr>
+                 ))}
+                 {!isLoadingReceivingGoods && receivingGoodsList.length === 0 && receivings.length === 0 && <tr><td colSpan={5} className="py-20 text-center text-slate-300 font-black uppercase italic tracking-widest">Belum ada pengiriman barang datang</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

@@ -735,6 +735,149 @@ interface POItemUpdateRequest {
   subtotal?: number;
 }
 
+// Receiving Goods Data Types
+interface ReceivingGoodsData {
+  id?: number | string;
+  code: string;
+  po_id?: number | string | null;
+  supplier_id?: number | string | null;
+  date: string;
+  description?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  purchase_order?: {
+    id: number;
+    code: string;
+    rfq_id?: number;
+    supplier_id?: number;
+    date: string;
+    description?: string;
+    grand_total: string | number;
+    status: "OPEN" | "RECEIVED";
+    created_at?: string;
+    updated_at?: string;
+  };
+  supplier?: {
+    id: number | string;
+    name: string;
+    contact?: string;
+    address?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+}
+
+interface ReceivingGoodsListResponse {
+  success?: boolean;
+  data: {
+    current_page?: number;
+    data: ReceivingGoodsData[];
+    first_page_url?: string;
+    from?: number;
+    last_page?: number;
+    last_page_url?: string;
+    links?: any[];
+    next_page_url?: string | null;
+    path?: string;
+    per_page?: number;
+    prev_page_url?: string | null;
+    to?: number;
+    total?: number;
+  };
+}
+
+interface ReceivingGoodsResponse {
+  success: boolean;
+  message?: string;
+  data: ReceivingGoodsData;
+}
+
+interface ReceivingGoodsCreateRequest {
+  code: string;
+  po_id?: number | string;
+  supplier_id?: number | string;
+  date: string;
+  description?: string;
+}
+
+interface ReceivingGoodsUpdateRequest {
+  code?: string;
+  po_id?: number | string;
+  supplier_id?: number | string;
+  date?: string;
+  description?: string;
+}
+
+// Receiving Items Data Types
+interface ReceivingItemData {
+  id?: number | string;
+  receiving_id?: number | string;
+  material_id?: number | string;
+  name: string;
+  qty: number;
+  created_at?: string;
+  updated_at?: string;
+  receiving?: {
+    id: number;
+    code: string;
+    po_id?: number;
+    supplier_id?: number;
+    date: string;
+    description?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  material?: {
+    id: number;
+    code: string;
+    name: string;
+    unit: string;
+    current_stock: number;
+    safety_stock: number;
+    price_per_unit: string | number;
+    category: string;
+  };
+}
+
+interface ReceivingItemsListResponse {
+  success?: boolean;
+  data: {
+    current_page?: number;
+    data: ReceivingItemData[];
+    first_page_url?: string;
+    from?: number;
+    last_page?: number;
+    last_page_url?: string;
+    links?: any[];
+    next_page_url?: string | null;
+    path?: string;
+    per_page?: number;
+    prev_page_url?: string | null;
+    to?: number;
+    total?: number;
+  };
+}
+
+interface ReceivingItemResponse {
+  success: boolean;
+  message?: string;
+  data: ReceivingItemData;
+}
+
+interface ReceivingItemCreateRequest {
+  receiving_id?: number | string;
+  material_id?: number | string;
+  name: string;
+  qty: number;
+}
+
+interface ReceivingItemUpdateRequest {
+  receiving_id?: number | string;
+  material_id?: number | string;
+  name?: string;
+  qty?: number;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -1785,6 +1928,139 @@ class ApiClient {
     );
   }
 
+  // Receiving Goods API Methods
+  async getReceivingGoods(
+    page: number = 1,
+    perPage: number = 10
+  ): Promise<ApiResponse<ReceivingGoodsListResponse>> {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("per_page", perPage.toString());
+    return this.request<ReceivingGoodsListResponse>(
+      `/receiving-goods?${params.toString()}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getReceivingGood(
+    id: string | number
+  ): Promise<ApiResponse<ReceivingGoodsResponse>> {
+    return this.request<ReceivingGoodsResponse>(
+      `/receiving-goods/${id}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async createReceivingGoods(
+    data: ReceivingGoodsCreateRequest
+  ): Promise<ApiResponse<ReceivingGoodsResponse>> {
+    return this.request<ReceivingGoodsResponse>(
+      "/receiving-goods",
+      "POST",
+      data,
+      true
+    );
+  }
+
+  async updateReceivingGoods(
+    id: string | number,
+    data: ReceivingGoodsUpdateRequest
+  ): Promise<ApiResponse<ReceivingGoodsResponse>> {
+    return this.request<ReceivingGoodsResponse>(
+      `/receiving-goods/${id}`,
+      "PUT",
+      data,
+      true
+    );
+  }
+
+  async deleteReceivingGoods(
+    id: string | number
+  ): Promise<ApiResponse<DeleteResponse>> {
+    return this.request<DeleteResponse>(
+      `/receiving-goods/${id}`,
+      "DELETE",
+      {},
+      true
+    );
+  }
+
+  // Receiving Items API Methods
+  async getReceivingItems(
+    page: number = 1,
+    perPage: number = 10
+  ): Promise<ApiResponse<ReceivingItemsListResponse>> {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("per_page", perPage.toString());
+    return this.request<ReceivingItemsListResponse>(
+      `/receiving-items?${params.toString()}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getReceivingItem(
+    id: string | number
+  ): Promise<ApiResponse<ReceivingItemResponse>> {
+    return this.request<ReceivingItemResponse>(
+      `/receiving-items/${id}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getReceivingItemsByReceivingId(
+    receivingId: string | number
+  ): Promise<ApiResponse<ReceivingItemsListResponse>> {
+    return this.request<ReceivingItemsListResponse>(
+      `/receiving-goods/${receivingId}/items`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async createReceivingItem(
+    data: ReceivingItemCreateRequest
+  ): Promise<ApiResponse<ReceivingItemResponse>> {
+    return this.request<ReceivingItemResponse>(
+      "/receiving-items",
+      "POST",
+      data,
+      true
+    );
+  }
+
+  async updateReceivingItem(
+    id: string | number,
+    data: ReceivingItemUpdateRequest
+  ): Promise<ApiResponse<ReceivingItemResponse>> {
+    return this.request<ReceivingItemResponse>(
+      `/receiving-items/${id}`,
+      "PUT",
+      data,
+      true
+    );
+  }
+
+  async deleteReceivingItem(
+    id: string | number
+  ): Promise<ApiResponse<DeleteResponse>> {
+    return this.request<DeleteResponse>(
+      `/receiving-items/${id}`,
+      "DELETE",
+      {},
+      true
+    );
+  }
+
   // Backup API Methods
   async getBackups(): Promise<ApiResponse<any>> {
     return this.request<any>("/backups", "GET", undefined, true);
@@ -1919,4 +2195,14 @@ export type {
   POItemResponse,
   POItemCreateRequest,
   POItemUpdateRequest,
+  ReceivingGoodsData,
+  ReceivingGoodsListResponse,
+  ReceivingGoodsResponse,
+  ReceivingGoodsCreateRequest,
+  ReceivingGoodsUpdateRequest,
+  ReceivingItemData,
+  ReceivingItemsListResponse,
+  ReceivingItemResponse,
+  ReceivingItemCreateRequest,
+  ReceivingItemUpdateRequest,
 };
