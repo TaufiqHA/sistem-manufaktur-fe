@@ -205,56 +205,114 @@ export const Projects: React.FC = () => {
           </div>
         ) : (
           <>
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-black tracking-widest border-b">
-                <tr>
-                  <th className="px-8 py-5">Kode / Nama</th>
-                  <th className="px-8 py-5">Customer</th>
-                  <th className="px-8 py-5 text-center">Pengadaan</th>
-                  <th className="px-8 py-5 text-center">Qty/Unit</th>
-                  <th className="px-8 py-5 text-center">Total Target</th>
-                  <th className="px-8 py-5">Deadline</th>
-                  <th className="px-8 py-5 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-bold">
-                {paginatedProjects.length === 0 ? (
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-black tracking-widest border-b">
                   <tr>
-                    <td colSpan={7} className="px-8 py-12 text-center text-slate-500">
-                      Tidak ada data proyek
-                    </td>
+                    <th className="px-4 lg:px-8 py-5">Kode / Nama</th>
+                    <th className="px-4 lg:px-8 py-5">Customer</th>
+                    <th className="px-4 lg:px-8 py-5 text-center">Pengadaan</th>
+                    <th className="px-4 lg:px-8 py-5 text-center">Qty/Unit</th>
+                    <th className="px-4 lg:px-8 py-5 text-center">Total Target</th>
+                    <th className="px-4 lg:px-8 py-5">Deadline</th>
+                    <th className="px-4 lg:px-8 py-5 text-right">Aksi</th>
                   </tr>
-                ) : (
-                  paginatedProjects.map(p => (
-                    <tr key={p.id} className="hover:bg-slate-50/50 transition-colors group">
-                      <td className="px-8 py-5">
-                        <p className="text-[10px] text-blue-600 font-black mb-1">{p.code}</p>
-                        <p className="font-black text-slate-800 text-base">{p.name}</p>
-                      </td>
-                      <td className="px-8 py-5 text-slate-500">{p.customer}</td>
-                      <td className="px-8 py-5 text-center font-black text-slate-700">{p.procurementQty}</td>
-                      <td className="px-8 py-5 text-center font-black text-slate-700">{p.qtyPerUnit} {p.unit}</td>
-                      <td className="px-8 py-5 text-center font-black text-blue-700 text-lg">{p.totalQty} {p.unit}</td>
-                      <td className="px-8 py-5 text-slate-600">{new Date(p.deadline).toLocaleDateString('id-ID')}</td>
-                      <td className="px-8 py-5 text-right">
-                        <div className="flex justify-end gap-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all">
-                          <button onClick={() => navigate(`/projects/${p.id}`)} className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="View Details"><Eye size={20}/></button>
-                          {!p.isLocked ? (
-                            <>
-                              <button onClick={() => openEdit(p)} className="p-3 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Edit"><Edit3 size={20}/></button>
-                              <button onClick={() => handleDelete(p.id)} className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" title="Delete"><Trash2 size={20}/></button>
-                            </>
-                          ) : (
-                            <div className="p-3 text-emerald-500" title="Project Locked"><Lock size={20}/></div>
-                          )}
-                        </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-bold">
+                  {paginatedProjects.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 lg:px-8 py-12 text-center text-slate-500">
+                        Tidak ada data proyek
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-            <div className="p-6 bg-slate-50 border-t flex justify-between items-center text-xs font-black text-slate-500 uppercase tracking-widest">
+                  ) : (
+                    paginatedProjects.map(p => (
+                      <tr key={p.id} className="hover:bg-slate-50/50 transition-colors group">
+                        <td className="px-4 lg:px-8 py-5">
+                          <p className="text-[10px] text-blue-600 font-black mb-1">{p.code}</p>
+                          <p className="font-black text-slate-800 text-base">{p.name}</p>
+                        </td>
+                        <td className="px-4 lg:px-8 py-5 text-slate-500">{p.customer}</td>
+                        <td className="px-4 lg:px-8 py-5 text-center font-black text-slate-700">{p.procurementQty}</td>
+                        <td className="px-4 lg:px-8 py-5 text-center font-black text-slate-700">{p.qtyPerUnit} {p.unit}</td>
+                        <td className="px-4 lg:px-8 py-5 text-center font-black text-blue-700 text-lg">{p.totalQty} {p.unit}</td>
+                        <td className="px-4 lg:px-8 py-5 text-slate-600">{new Date(p.deadline).toLocaleDateString('id-ID')}</td>
+                        <td className="px-4 lg:px-8 py-5 text-right">
+                          <div className="flex justify-end gap-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all">
+                            <button onClick={() => navigate(`/projects/${p.id}`)} className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="View Details"><Eye size={20}/></button>
+                            {!p.isLocked ? (
+                              <>
+                                <button onClick={() => openEdit(p)} className="p-3 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Edit"><Edit3 size={20}/></button>
+                                <button onClick={() => handleDelete(p.id)} className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" title="Delete"><Trash2 size={20}/></button>
+                              </>
+                            ) : (
+                              <div className="p-3 text-emerald-500" title="Project Locked"><Lock size={20}/></div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4 p-4">
+              {paginatedProjects.length === 0 ? (
+                <div className="py-12 text-center text-slate-500">
+                  Tidak ada data proyek
+                </div>
+              ) : (
+                paginatedProjects.map(p => (
+                  <div key={p.id} className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-1">
+                        <p className="text-[10px] text-blue-600 font-black">{p.code}</p>
+                        <p className="font-black text-slate-800 text-sm line-clamp-2">{p.name}</p>
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button onClick={() => navigate(`/projects/${p.id}`)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="View Details"><Eye size={16}/></button>
+                        {!p.isLocked ? (
+                          <>
+                            <button onClick={() => openEdit(p)} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all" title="Edit"><Edit3 size={16}/></button>
+                            <button onClick={() => handleDelete(p.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Delete"><Trash2 size={16}/></button>
+                          </>
+                        ) : (
+                          <div className="p-2 text-emerald-500" title="Project Locked"><Lock size={16}/></div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-lg p-3 space-y-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-black">Customer</span>
+                        <span className="text-slate-700 font-black">{p.customer}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-black">Pengadaan</span>
+                        <span className="text-slate-700 font-black">{p.procurementQty}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-black">Qty/Unit</span>
+                        <span className="text-slate-700 font-black">{p.qtyPerUnit} {p.unit}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-black">Total Target</span>
+                        <span className="text-blue-700 font-black">{p.totalQty} {p.unit}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-black">Deadline</span>
+                        <span className="text-slate-600 font-black">{new Date(p.deadline).toLocaleDateString('id-ID')}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="p-4 md:p-6 bg-slate-50 border-t flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-black text-slate-500 uppercase tracking-widest">
               <span>Halaman {currentPage} dari {totalPages || 1}</span>
               <div className="flex items-center gap-3">
                 <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="p-2.5 hover:bg-white border rounded-xl disabled:opacity-30 shadow-sm transition-all"><ChevronLeft size={18}/></button>
