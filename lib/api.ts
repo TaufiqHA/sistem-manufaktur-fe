@@ -242,10 +242,13 @@ interface ProjectItemData {
   dimensions: string;
   thickness: string;
   qty_set: number;
+  qty_per_product?: number;
+  total_required_qty?: number;
   quantity: number;
   unit: string;
   is_bom_locked?: boolean;
   is_workflow_locked?: boolean;
+  is_workflow_completed?: boolean;
   workflow?: any[];
   created_at?: string;
   updated_at?: string;
@@ -280,11 +283,15 @@ interface ProjectItemCreateRequest {
   dimensions: string;
   thickness: string;
   qty_set: number;
+  qty_per_product?: number;
+  total_required_qty?: number;
   quantity: number;
   unit: string;
   is_bom_locked?: boolean;
   is_workflow_locked?: boolean;
+  is_workflow_completed?: boolean;
   workflow?: any[];
+  bom?: any[];
 }
 
 interface BomItemData {

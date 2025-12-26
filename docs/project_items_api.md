@@ -41,6 +41,8 @@ Retrieve a paginated list of all project items.
       "dimensions": "1200x600x18",
       "thickness": "18mm",
       "qty_set": 1,
+      "qty_per_product": 2,
+      "total_required_qty": 20,
       "quantity": 10,
       "unit": "pcs",
       "is_bom_locked": false,
@@ -87,6 +89,8 @@ Retrieve a specific project item by ID.
   "dimensions": "1200x600x18",
   "thickness": "18mm",
   "qty_set": 1,
+  "qty_per_product": 2,
+  "total_required_qty": 20,
   "quantity": 10,
   "unit": "pcs",
   "is_bom_locked": false,
@@ -123,6 +127,8 @@ Create a new project item.
   "dimensions": "1200x600x18",
   "thickness": "18mm",
   "qty_set": 1,
+  "qty_per_product": 2,
+  "total_required_qty": 20,
   "quantity": 10,
   "unit": "pcs",
   "is_bom_locked": false,
@@ -137,6 +143,8 @@ Create a new project item.
 - `dimensions` (required): Dimensions of the item (string, max: 255)
 - `thickness` (required): Thickness of the item (string, max: 255)
 - `qty_set` (required): Quantity per set (integer)
+- `qty_per_product` (required): Quantity per product (integer)
+- `total_required_qty` (required): Total required quantity (integer)
 - `quantity` (required): Total quantity needed (integer)
 - `unit` (required): Unit of measurement (string, max: 50)
 - `is_bom_locked` (optional): Whether bill of materials is locked (boolean, default: false)
@@ -153,6 +161,8 @@ Create a new project item.
   "dimensions": "1200x600x18",
   "thickness": "18mm",
   "qty_set": 1,
+  "qty_per_product": 2,
+  "total_required_qty": 20,
   "quantity": 10,
   "unit": "pcs",
   "is_bom_locked": false,
@@ -182,6 +192,8 @@ Update an existing project item.
   "dimensions": "1400x700x18",
   "thickness": "18mm",
   "qty_set": 1,
+  "qty_per_product": 3,
+  "total_required_qty": 45,
   "quantity": 15,
   "unit": "pcs",
   "is_bom_locked": true,
@@ -205,6 +217,8 @@ Update an existing project item.
   "dimensions": "1400x700x18",
   "thickness": "18mm",
   "qty_set": 1,
+  "qty_per_product": 3,
+  "total_required_qty": 45,
   "quantity": 15,
   "unit": "pcs",
   "is_bom_locked": true,
@@ -275,6 +289,8 @@ Delete a specific project item.
 - `dimensions`: string (e.g., "1200x600x18")
 - `thickness`: string (e.g., "18mm")
 - `qty_set`: integer
+- `qty_per_product`: integer
+- `total_required_qty`: integer (default: 0)
 - `quantity`: integer
 - `unit`: string (e.g., "pcs", "sets", "sheets", etc.)
 - `is_bom_locked`: boolean (default: false)

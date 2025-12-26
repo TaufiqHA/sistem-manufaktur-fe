@@ -479,6 +479,18 @@ export const ProjectDetail: React.FC = () => {
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   }, [project]);
 
+  // Calculate finished product count based on item completion (bottleneck approach)
+  // A product is only finished when ALL its items are complete through PACKING step
+  const finishedProductCount = useMemo(() => {
+    if (projectItems.length === 0) return 0;
+    const itemCompletionCounts = projectItems.map(item =>
+      mergedTasks
+        .filter(t => (t.itemId || t.item_id) === item.id && t.step === 'PACKING')
+        .reduce((acc, t) => acc + (t.completedQty || t.completed_qty || 0), 0)
+    );
+    return Math.min(...itemCompletionCounts);
+  }, [projectItems, mergedTasks]);
+
   // Auto-complete items when all workflow steps are finished - optimized to prevent excessive API calls
   useEffect(() => {
     const checkAndCompleteItems = async () => {
@@ -539,13 +551,16 @@ export const ProjectDetail: React.FC = () => {
     e.preventDefault();
     setIsSaving(true);
     try {
+      const totalQuantity = (project?.total_qty ?? 0) * newItem.qtySet;
       const payload = {
         project_id: project?.id!,
         name: newItem.name,
         dimensions: newItem.dimensions,
         thickness: newItem.thickness,
         qty_set: newItem.qtySet,
-        quantity: (project?.total_qty ?? 0) * newItem.qtySet,
+        qty_per_product: newItem.qtySet,
+        total_required_qty: totalQuantity,
+        quantity: totalQuantity,
         unit: newItem.unit,
         is_bom_locked: false,
         is_workflow_locked: false,
@@ -761,7 +776,7 @@ export const ProjectDetail: React.FC = () => {
             <div className="bg-emerald-50 px-6 py-3 rounded-[24px] border border-emerald-100">
                 <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-1">Produk Selesai (PACKING)</p>
                 <p className="font-black text-emerald-600 text-xl">
-                  {projectTasks.filter(t => t.step === 'PACKING').reduce((acc, t) => acc + (t.completedQty || t.completed_qty || 0), 0)} {project.unit}
+                  {finishedProductCount} {project.unit}
                 </p>
             </div>
           </div>
