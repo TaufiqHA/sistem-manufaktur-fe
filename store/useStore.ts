@@ -61,6 +61,7 @@ interface AppState {
   addUser: (u: User) => void;
   updateUser: (u: User) => void;
   deleteUser: (id: string) => void;
+  validateToWarehouse: (itemId: string, qty: number) => void;
   downloadDatabase: () => void;
 
   // Procurement methods
@@ -284,6 +285,37 @@ export const useStore = create<AppState>((set, get) => ({
   addUser: (u) => set(s => ({ users: [...s.users, u] })),
   updateUser: (u) => set(s => ({ users: s.users.map(x => x.id === u.id ? u : x) })),
   deleteUser: (id) => set(s => ({ users: s.users.filter(x => x.id !== id) })),
+  validateToWarehouse: (itemId, qty) => set((state) => {
+    // Find the item to update
+    const item = state.items.find(i => i.id === itemId);
+    if (!item) return state;
+
+    // Create a warehouse entry log
+    const newLog: ProductionLog = {
+      id: `log-${Date.now()}`,
+      taskId: '', // No specific task associated with warehouse validation
+      machineId: '', // No specific machine
+      itemId: itemId,
+      projectId: item.projectId,
+      step: 'QC', // This represents the validation from QC to warehouse
+      shift: 'SHIFT_1', // Default shift
+      goodQty: qty,
+      defectQty: 0,
+      operator: state.currentUser?.name || 'System',
+      timestamp: new Date().toISOString(),
+      type: 'WAREHOUSE_ENTRY'
+    };
+
+    // Update the item's warehouse quantity
+    return {
+      items: state.items.map(i =>
+        i.id === itemId
+          ? { ...i, warehouseQty: (i.warehouseQty || 0) + qty }
+          : i
+      ),
+      logs: [newLog, ...state.logs]
+    };
+  }),
   downloadDatabase: () => {
     const state = get();
     const data = {

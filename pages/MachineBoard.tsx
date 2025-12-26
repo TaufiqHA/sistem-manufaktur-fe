@@ -10,6 +10,7 @@ export const MachineBoard: React.FC = () => {
   const [apiMachines, setApiMachines] = useState<any[]>([]);
   const [apiTasks, setApiTasks] = useState<TaskData[]>([]);
   const [apiLogs, setApiLogs] = useState<any[]>([]);
+  const [finishedGoodsWarehouses, setFinishedGoodsWarehouses] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +110,26 @@ export const MachineBoard: React.FC = () => {
 
     fetchData();
   }, [selectedMachineId, selectedShift]);
+
+  // Fetch finished goods warehouses data
+  useEffect(() => {
+    const fetchWarehouses = async () => {
+      try {
+        const response = await apiClient.getFinishedGoodsWarehouses();
+        if (response.success && response.data) {
+          const warehouseList = Array.isArray(response.data) ? response.data : (response.data.data || []);
+          setFinishedGoodsWarehouses(warehouseList);
+        }
+      } catch (err) {
+        console.error('Error fetching finished goods warehouses:', err);
+      }
+    };
+
+    fetchWarehouses();
+    // Refresh every 30 seconds to keep warehouse data up to date
+    const interval = setInterval(fetchWarehouses, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const machine = machines.find(m => m.id === selectedMachineId);
   const machineTasks = apiTasks.filter(t => t.status !== 'COMPLETED' && t.shift === selectedShift);
@@ -214,11 +235,123 @@ export const MachineBoard: React.FC = () => {
           // Update Zustand store to sync workflow progress across pages
           reportProduction(reportModal.id, qtyGood, qtyDefect, selectedShift, currentUser?.name || 'Unknown');
 
-          // If this is the PACKING (final/finishing) step, automatically reduce material stock and update realisasi
+          // If this is the PACKING (final/finishing) step, automatically reduce material stock, update warehouse, and update realisasi
           if (reportModal.step === 'PACKING' && qtyGood > 0) {
-            console.log('PACKING step reported. Reducing material stock for item:', reportModal.item_id, 'Quantity:', qtyGood);
+            console.log('PACKING step reported. Processing warehouse and material stock for item:', reportModal.item_id, 'Quantity:', qtyGood);
 
             try {
+              // First, handle finished goods warehouse
+              console.log('Updating finished goods warehouse for project:', reportModal.project_id, 'Item:', reportModal.item_name);
+
+              try {
+                // Fetch all project items to check if all quantities are met
+                const projectItemsResponse = await apiClient.getProjectItemsByProjectId(reportModal.project_id);
+                let allProjectItems = [];
+
+                if (projectItemsResponse.success && projectItemsResponse.data) {
+                  allProjectItems = Array.isArray(projectItemsResponse.data) ? projectItemsResponse.data : (projectItemsResponse.data.data || []);
+                  console.log('All project items:', allProjectItems);
+                }
+
+                // Fetch all PACKING tasks for this project
+                const projectTasksResponse = await apiClient.getTasks(1, 1000, { project_id: reportModal.project_id });
+                let projectTasks = [];
+
+                if (projectTasksResponse.success && projectTasksResponse.data) {
+                  projectTasks = Array.isArray(projectTasksResponse.data) ? projectTasksResponse.data : (projectTasksResponse.data.data || []);
+                  console.log('All project tasks:', projectTasks);
+                }
+
+                // Check if ALL items have their required quantities completed in PACKING
+                let allQuantitiesComplete = true;
+                let incompleteItems = [];
+
+                for (const item of allProjectItems) {
+                  const packingTask = projectTasks.find(
+                    (t: any) => t.item_id === item.id && t.step === 'PACKING'
+                  );
+
+                  // Get the required quantity for this item (qty_set or quantity field)
+                  const requiredQty = item.qty_set || item.quantity || 1;
+                  const completedQty = packingTask?.completed_qty || 0;
+
+                  console.log(`Item: ${item.name}, Required: ${requiredQty}, Completed: ${completedQty}`);
+
+                  // Check if this item has met its required quantity
+                  if (!packingTask || completedQty < requiredQty) {
+                    allQuantitiesComplete = false;
+                    incompleteItems.push(`${item.name} (${completedQty}/${requiredQty})`);
+                  }
+                }
+
+                console.log('All items quantities complete:', allQuantitiesComplete);
+                console.log('Incomplete items:', incompleteItems);
+
+                // Only update warehouse if ALL items in project have completed their required quantities
+                if (allQuantitiesComplete && allProjectItems.length > 0) {
+                  // Get project name for warehouse record
+                  let projectName = reportModal.item_name;
+                  const projectResponse = await apiClient.getProject(reportModal.project_id);
+                  if (projectResponse.success && projectResponse.data) {
+                    projectName = projectResponse.data.name || reportModal.item_name;
+                  }
+
+                  console.log('All items completed! Creating/updating warehouse for project:', projectName);
+
+                  // Fetch existing finished goods warehouses for this project
+                  const warehouseResponse = await apiClient.getFinishedGoodsWarehouses();
+                  let existingWarehouse = null;
+
+                  if (warehouseResponse.success && warehouseResponse.data) {
+                    const warehouses = Array.isArray(warehouseResponse.data) ? warehouseResponse.data : (warehouseResponse.data.data || []);
+                    // Find warehouse for this project
+                    existingWarehouse = warehouses.find(
+                      (w: any) => w.project_id === reportModal.project_id
+                    );
+                  }
+
+                  // Add 1 finished product since ALL items are complete
+                  const finishedProductsToAdd = 1;
+
+                  if (existingWarehouse) {
+                    // Update existing warehouse record
+                    const updatedTotalProduced = (existingWarehouse.total_produced || 0) + finishedProductsToAdd;
+                    const updatedAvailableStock = (existingWarehouse.available_stock || 0) + finishedProductsToAdd;
+
+                    const updateResponse = await apiClient.updateFinishedGoodsWarehouse(
+                      existingWarehouse.id,
+                      {
+                        project_id: reportModal.project_id,
+                        item_name: projectName,
+                        total_produced: updatedTotalProduced,
+                        shipped_qty: existingWarehouse.shipped_qty || 0,
+                        available_stock: updatedAvailableStock,
+                        unit: existingWarehouse.unit || 'pcs'
+                      }
+                    );
+                    console.log('Finished goods warehouse updated:', updateResponse);
+                  } else {
+                    // Create new warehouse record
+                    const createResponse = await apiClient.createFinishedGoodsWarehouse({
+                      project_id: reportModal.project_id,
+                      item_name: projectName,
+                      total_produced: finishedProductsToAdd,
+                      shipped_qty: 0,
+                      available_stock: finishedProductsToAdd,
+                      unit: 'pcs'
+                    });
+                    console.log('Finished goods warehouse created:', createResponse);
+                  }
+                } else {
+                  console.log('Not all items completed PACKING yet. Incomplete items:', incompleteItems.join(', '));
+                }
+              } catch (warehouseErr) {
+                console.error('Error updating finished goods warehouse:', warehouseErr);
+              }
+
+              // Then, handle material stock reduction
+              console.log('Reducing material stock for item:', reportModal.item_id, 'Quantity:', qtyGood);
+
               // Fetch BOM items for this product item
               const bomResponse = await apiClient.getBomItemsByProjectItem(reportModal.item_id);
               let bomItems = [];
@@ -260,7 +393,7 @@ export const MachineBoard: React.FC = () => {
                 }
               }
             } catch (bomErr) {
-              console.error('Error processing material stock reduction:', bomErr);
+              console.error('Error processing PACKING step:', bomErr);
             }
           }
 
@@ -274,6 +407,19 @@ export const MachineBoard: React.FC = () => {
             }
           } catch (refreshErr) {
             console.error('Error refreshing tasks:', refreshErr);
+          }
+
+          // Refresh finished goods warehouses data after PACKING step
+          if (reportModal.step === 'PACKING') {
+            try {
+              const warehouseResponse = await apiClient.getFinishedGoodsWarehouses();
+              if (warehouseResponse.success && warehouseResponse.data) {
+                const warehouseList = Array.isArray(warehouseResponse.data) ? warehouseResponse.data : (warehouseResponse.data.data || []);
+                setFinishedGoodsWarehouses(warehouseList);
+              }
+            } catch (warehouseRefreshErr) {
+              console.error('Error refreshing finished goods warehouses:', warehouseRefreshErr);
+            }
           }
         }
 

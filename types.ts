@@ -82,6 +82,8 @@ export interface ProjectItem {
   isWorkflowLocked: boolean;
   bom: BomItem[];
   workflow: ItemStepConfig[];
+  warehouseQty?: number; // New: Quantity in warehouse
+  shippedQty?: number;   // New: Quantity shipped
 }
 
 export type MachineStatus =
@@ -154,7 +156,8 @@ export type ModuleName =
   | "USERS"
   | "REPORTS"
   | "DASHBOARD"
-  | "PROCUREMENT";
+  | "PROCUREMENT"
+  | "WAREHOUSE";
 export interface ModulePermission {
   view: boolean;
   create: boolean;

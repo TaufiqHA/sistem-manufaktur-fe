@@ -35,6 +35,8 @@ export const MOCK_ITEMS: ProjectItem[] = [
   {
     id: 'i1', projectId: 'p1', name: 'Tiang Gondola 2m', dimensions: '2000x50x50', thickness: '2mm', qtySet: 1, quantity: 100, unit: 'Pcs', isBomLocked: true, isWorkflowLocked: true,
     workflow: [], // Added empty workflow to satisfy type definition
+    warehouseQty: 50, // New: Quantity in warehouse
+    shippedQty: 20,   // New: Quantity shipped
     bom: [
       { id: 'b1', itemId: 'i1', materialId: 'm1', quantityPerUnit: 0.1, totalRequired: 10, allocated: 0, realized: 0 },
       { id: 'b2', itemId: 'i1', materialId: 'm3', quantityPerUnit: 0.5, totalRequired: 50, allocated: 0, realized: 0 },
@@ -59,10 +61,10 @@ export const MOCK_RECEIVINGS: ReceivingGoods[] = [];
 
 const FULL_ACCESS = { view: true, create: true, edit: true, delete: true };
 const NO_ACCESS = { view: false, create: false, edit: false, delete: false };
-// Added REPORTS to ADMIN_PERMISSIONS to satisfy exhaustive Record mapping in PermissionMap
-export const ADMIN_PERMISSIONS: PermissionMap = { PROJECTS: FULL_ACCESS, MATERIALS: FULL_ACCESS, MACHINES: FULL_ACCESS, USERS: FULL_ACCESS, DASHBOARD: FULL_ACCESS, REPORTS: FULL_ACCESS, PROCUREMENT: FULL_ACCESS };
+// Added REPORTS and WAREHOUSE to ADMIN_PERMISSIONS to satisfy exhaustive Record mapping in PermissionMap
+export const ADMIN_PERMISSIONS: PermissionMap = { PROJECTS: FULL_ACCESS, MATERIALS: FULL_ACCESS, MACHINES: FULL_ACCESS, USERS: FULL_ACCESS, DASHBOARD: FULL_ACCESS, REPORTS: FULL_ACCESS, PROCUREMENT: FULL_ACCESS, WAREHOUSE: FULL_ACCESS };
 
-const OPERATOR_PERMISSIONS: PermissionMap = { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: NO_ACCESS, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false }, PROCUREMENT: NO_ACCESS };
+const OPERATOR_PERMISSIONS: PermissionMap = { PROJECTS: { view: true, create: false, edit: false, delete: false }, MATERIALS: { view: true, create: false, edit: false, delete: false }, MACHINES: { view: true, create: false, edit: false, delete: false }, USERS: NO_ACCESS, DASHBOARD: { view: true, create: false, edit: false, delete: false }, REPORTS: { view: true, create: false, edit: false, delete: false }, PROCUREMENT: NO_ACCESS, WAREHOUSE: NO_ACCESS };
 
 export const MOCK_USERS: User[] = [
   { id: 'u1', name: 'Super Admin', username: 'admin', role: 'ADMIN', permissions: ADMIN_PERMISSIONS },

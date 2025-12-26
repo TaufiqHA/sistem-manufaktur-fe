@@ -2118,6 +2118,68 @@ class ApiClient {
     return this.request<any>("/backups/stats", "GET", undefined, true);
   }
 
+  // Finished Goods Warehouse API Methods
+  async getFinishedGoodsWarehouses(
+    page: number = 1,
+    perPage: number = 15,
+    projectId?: string | number
+  ): Promise<ApiResponse<any>> {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("per_page", perPage.toString());
+    if (projectId) params.append("project_id", projectId.toString());
+
+    return this.request<any>(
+      `/finished-goods-warehouses?${params.toString()}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getFinishedGoodsWarehouse(
+    id: string | number
+  ): Promise<ApiResponse<any>> {
+    return this.request<any>(
+      `/finished-goods-warehouses/${id}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async createFinishedGoodsWarehouse(data: any): Promise<ApiResponse<any>> {
+    return this.request<any>(
+      "/finished-goods-warehouses",
+      "POST",
+      data,
+      true
+    );
+  }
+
+  async updateFinishedGoodsWarehouse(
+    id: string | number,
+    data: any
+  ): Promise<ApiResponse<any>> {
+    return this.request<any>(
+      `/finished-goods-warehouses/${id}`,
+      "PUT",
+      data,
+      true
+    );
+  }
+
+  async deleteFinishedGoodsWarehouse(
+    id: string | number
+  ): Promise<ApiResponse<any>> {
+    return this.request<any>(
+      `/finished-goods-warehouses/${id}`,
+      "DELETE",
+      {},
+      true
+    );
+  }
+
   setToken(token: string): void {
     localStorage.setItem("auth_token", token);
   }

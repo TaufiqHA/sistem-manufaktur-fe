@@ -55,6 +55,8 @@ export const ProjectDetail: React.FC = () => {
   const [apiMachines, setApiMachines] = useState<any[]>([]);
   const [machinesLoading, setMachinesLoading] = useState(false);
   const [apiTaskStatistics, setApiTaskStatistics] = useState<{total: number; pending: number; in_progress: number; paused: number; downtime: number; completed: number} | null>(null);
+  const [finishedGoodsData, setFinishedGoodsData] = useState<any[]>([]);
+  const [finishedGoodsLoading, setFinishedGoodsLoading] = useState(false);
 
   useEffect(() => {
     const fetchProjectAndItems = async () => {
@@ -244,6 +246,32 @@ export const ProjectDetail: React.FC = () => {
     setApiTaskStatistics(stats);
   }, [apiTasks]); // This is fine as it only depends on apiTasks
 
+  useEffect(() => {
+    const fetchFinishedGoods = async () => {
+      if (!id) return;
+      setFinishedGoodsLoading(true);
+      try {
+        const response = await apiClient.getFinishedGoodsWarehouses(1, 100, id);
+        if (response.success && response.data) {
+          let finishedGoodsList = [];
+          // Handle different response formats
+          if (Array.isArray(response.data)) {
+            finishedGoodsList = response.data;
+          } else if (response.data.data && Array.isArray(response.data.data)) {
+            finishedGoodsList = response.data.data;
+          }
+          setFinishedGoodsData(finishedGoodsList);
+        }
+      } catch (err) {
+        console.error('Error fetching finished goods:', err);
+      } finally {
+        setFinishedGoodsLoading(false);
+      }
+    };
+
+    fetchFinishedGoods();
+  }, [id]);
+
   // Memoize the merged tasks to prevent unnecessary re-renders
   const mergedTasks = useMemo(() => {
     const storeTaskMap = new Map(storeTasks.map(t => [t.id, t]));
@@ -306,9 +334,97 @@ export const ProjectDetail: React.FC = () => {
   const handleUpdateTaskStatus = async (taskId: string | number, newStatus: string) => {
     setIsSaving(true);
     try {
+      // Get the current task before updating
+      const currentTask = apiTasks.find(t => t.id === taskId);
+
       const response = await apiClient.updateTaskStatus(taskId, newStatus);
       if (response.success && response.data) {
         setApiTasks(apiTasks.map(t => t.id === taskId ? response.data : t));
+
+        // If PACKING step is marked as COMPLETED, create finished goods warehouse record
+        if (currentTask && currentTask.step === 'PACKING' && newStatus === 'COMPLETED') {
+          try {
+            const completedQty = response.data.completed_qty || 0;
+            const projectItem = projectItems.find(i => i.id === currentTask.item_id);
+
+            if (completedQty > 0 && projectItem && project) {
+              // Check if finished goods record already exists for this project
+              const existingRecord = finishedGoodsData.find(
+                fg => fg.project_id === project.id && fg.item_name === projectItem.name
+              );
+
+              if (existingRecord) {
+                // Update existing finished goods record
+                const updatedAvailableStock = (existingRecord.available_stock || 0) + completedQty;
+                const updatedProduced = (existingRecord.total_produced || 0) + completedQty;
+
+                const updatePayload = {
+                  project_id: Number(project.id),
+                  item_name: projectItem.name,
+                  total_produced: Number(updatedProduced),
+                  shipped_qty: Number(existingRecord.shipped_qty || 0),
+                  available_stock: Number(updatedAvailableStock),
+                  unit: project.unit
+                };
+
+                console.log('Updating finished goods warehouse with payload:', updatePayload);
+
+                const updateResponse = await apiClient.updateFinishedGoodsWarehouse(
+                  existingRecord.id,
+                  updatePayload
+                );
+
+                console.log('Finished goods update response:', updateResponse);
+
+                if (updateResponse.success && updateResponse.data) {
+                  console.log('✓ Updated finished goods warehouse record:', updateResponse.data);
+                  // Refresh finished goods data
+                  const refreshResponse = await apiClient.getFinishedGoodsWarehouses(1, 100, id);
+                  if (refreshResponse.success && refreshResponse.data) {
+                    let finishedGoodsList = [];
+                    if (Array.isArray(refreshResponse.data)) {
+                      finishedGoodsList = refreshResponse.data;
+                    } else if (refreshResponse.data.data && Array.isArray(refreshResponse.data.data)) {
+                      finishedGoodsList = refreshResponse.data.data;
+                    }
+                    setFinishedGoodsData(finishedGoodsList);
+                  }
+                } else {
+                  console.error('✗ Failed to update finished goods record:', updateResponse.message || 'Unknown error');
+                  setError(`Gagal update record produk selesai: ${updateResponse.message || 'Unknown error'}`);
+                }
+              } else {
+                // Create new finished goods record
+                const payload = {
+                  project_id: Number(project.id),
+                  item_name: projectItem.name,
+                  total_produced: Number(completedQty),
+                  shipped_qty: 0,
+                  available_stock: Number(completedQty),
+                  unit: project.unit
+                };
+
+                console.log('Creating finished goods warehouse with payload:', payload);
+
+                const createResponse = await apiClient.createFinishedGoodsWarehouse(payload);
+
+                console.log('Finished goods creation response:', createResponse);
+
+                if (createResponse.success && createResponse.data) {
+                  console.log('✓ Created finished goods warehouse record:', createResponse.data);
+                  // Add to local state
+                  setFinishedGoodsData([...finishedGoodsData, createResponse.data]);
+                } else {
+                  console.error('✗ Failed to create finished goods record:', createResponse.message || 'Unknown error');
+                  setError(`Gagal membuat record produk selesai: ${createResponse.message || 'Unknown error'}`);
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error creating/updating finished goods warehouse record:', err);
+            // Don't fail the whole operation if finished goods record creation fails
+          }
+        }
       } else {
         setError(response.message || 'Gagal mengubah status tugas');
       }
@@ -335,8 +451,86 @@ export const ProjectDetail: React.FC = () => {
       if (response.success && response.data) {
         setApiTasks(apiTasks.map(t => t.id === taskId ? response.data : t));
 
-        // If this is the PACKING (final/finishing) step, automatically reduce material stock and update realisasi
-        if (currentTask.step === 'PACKING' && completedQty > (currentTask.completed_qty || 0)) {
+        // If this is the PACKING (final/finishing) step, create/update finished goods warehouse
+        console.log('📦 PACKING CHECK - step:', currentTask.step, 'completedQty:', completedQty, 'projectItems:', projectItems.length, 'project:', project?.name);
+
+        if (currentTask.step === 'PACKING' && completedQty > 0) {
+          console.log('✨ PACKING TRIGGERED - Creating/updating finished goods warehouse');
+          try {
+            const projectItem = projectItems.find(i => i.id === currentTask.item_id);
+            console.log('📍 Found project item:', projectItem?.name, 'with id:', currentTask.item_id);
+
+            if (projectItem && project) {
+              // Check if finished goods record already exists for this project
+              const existingRecord = finishedGoodsData.find(
+                fg => fg.project_id === project.id && fg.item_name === projectItem.name
+              );
+
+              if (existingRecord) {
+                // Update existing finished goods record
+                const updatedAvailableStock = completedQty;
+                const updatedProduced = completedQty;
+
+                const updatePayload = {
+                  project_id: Number(project.id),
+                  item_name: projectItem.name,
+                  total_produced: Number(updatedProduced),
+                  shipped_qty: Number(existingRecord.shipped_qty || 0),
+                  available_stock: Number(updatedAvailableStock),
+                  unit: project.unit
+                };
+
+                console.log('Updating finished goods warehouse with payload:', updatePayload);
+
+                const updateResponse = await apiClient.updateFinishedGoodsWarehouse(
+                  existingRecord.id,
+                  updatePayload
+                );
+
+                console.log('Finished goods update response:', updateResponse);
+
+                if (updateResponse.success && updateResponse.data) {
+                  console.log('✓ Updated finished goods warehouse record:', updateResponse.data);
+                } else {
+                  console.error('✗ Failed to update finished goods record:', updateResponse.message || 'Unknown error');
+                }
+              } else {
+                // Create new finished goods record
+                const payload = {
+                  project_id: Number(project.id),
+                  item_name: projectItem.name,
+                  total_produced: Number(completedQty),
+                  shipped_qty: 0,
+                  available_stock: Number(completedQty),
+                  unit: project.unit
+                };
+
+                console.log('Creating finished goods warehouse with payload:', payload);
+
+                const createResponse = await apiClient.createFinishedGoodsWarehouse(payload);
+
+                console.log('Finished goods creation response:', createResponse);
+
+                if (createResponse.success && createResponse.data) {
+                  console.log('✅ Created finished goods warehouse record:', createResponse.data);
+                  // Add to local state
+                  const newData = [...finishedGoodsData, createResponse.data];
+                  console.log('📊 New finishedGoodsData:', newData);
+                  setFinishedGoodsData(newData);
+                } else {
+                  console.error('❌ Failed to create finished goods record');
+                  console.error('  Response success:', createResponse.success);
+                  console.error('  Response data:', createResponse.data);
+                  console.error('  Response message:', createResponse.message);
+                  console.error('  Full response:', createResponse);
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error creating/updating finished goods warehouse record:', err);
+          }
+
+          // Also reduce material stock and update realisasi
           const completedQuantityDifference = completedQty - (currentTask.completed_qty || 0);
           console.log('Reducing stock for item:', currentTask.item_id, 'Quantity difference:', completedQuantityDifference);
 
@@ -776,7 +970,7 @@ export const ProjectDetail: React.FC = () => {
             <div className="bg-emerald-50 px-6 py-3 rounded-[24px] border border-emerald-100">
                 <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-1">Produk Selesai (PACKING)</p>
                 <p className="font-black text-emerald-600 text-xl">
-                  {finishedProductCount} {project.unit}
+                  {finishedGoodsLoading ? '...' : (finishedGoodsData.reduce((sum, item) => sum + (item.available_stock || 0), 0))} {project.unit}
                 </p>
             </div>
           </div>
@@ -995,6 +1189,7 @@ export const ProjectDetail: React.FC = () => {
               </div>
             );
           })}
+
         </div>
       )}
 
