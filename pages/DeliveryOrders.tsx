@@ -90,7 +90,6 @@ export const DeliveryOrders: React.FC = () => {
   // Refresh data when switching to HISTORY tab
   useEffect(() => {
     if (activeTab === "HISTORY") {
-      console.log("✓ Refreshing delivery orders data for HISTORY tab");
       fetchDeliveryOrders();
     }
   }, [activeTab]);
@@ -160,25 +159,11 @@ export const DeliveryOrders: React.FC = () => {
         });
 
         setApiDeliveryOrders(orders);
-
-        // Log breakdown by status
-        const draftCount = orders.filter((o) => o.status === "DRAFT").length;
-        const validatedCount = orders.filter(
-          (o) => o.status === "VALIDATED"
-        ).length;
-        console.log("✓ Delivery orders loaded from API:", {
-          total: orders.length,
-          drafts: draftCount,
-          validated: validatedCount,
-          orders: orders,
-        });
       } else {
         // Fall back to store data if API fails
-        console.warn("No delivery orders from API, using local store");
         setApiDeliveryOrders(deliveryOrders);
       }
     } catch (err) {
-      console.error("Failed to fetch delivery orders:", err);
       // Fallback to store data on error
       setApiDeliveryOrders(deliveryOrders);
       setError("Gagal memuat data surat jalan. Menggunakan data lokal.");
@@ -196,10 +181,8 @@ export const DeliveryOrders: React.FC = () => {
           ? response.data
           : response.data.data || [];
         setWarehouseData(warehouseList);
-        console.log("Finished Goods Warehouse data loaded:", warehouseList);
       }
     } catch (err) {
-      console.error("Failed to fetch warehouse data:", err);
       setError("Gagal memuat data gudang jadi. Menggunakan data lokal.");
     } finally {
       setIsLoadingWarehouse(false);
@@ -215,10 +198,8 @@ export const DeliveryOrders: React.FC = () => {
           ? response.data
           : response.data.data || [];
         setApiProjects(projectsList);
-        console.log("Projects data loaded from API:", projectsList);
       }
     } catch (err) {
-      console.error("Failed to fetch projects:", err);
       // Don't show error for projects, just use local data
     } finally {
       setIsLoadingProjects(false);
@@ -259,16 +240,6 @@ export const DeliveryOrders: React.FC = () => {
     (o) => o.status?.toUpperCase() === "VALIDATED"
   );
 
-  console.log("Status filtering:", {
-    allOrdersCount: allDeliveryOrders.length,
-    draftsCount: drafts.length,
-    historyCount: history.length,
-    statusBreakdown: allDeliveryOrders.map((o) => ({
-      id: o.id,
-      code: o.code,
-      status: o.status,
-    })),
-  });
 
   const filteredHistory = history.filter(
     (sj) =>
@@ -489,7 +460,6 @@ export const DeliveryOrders: React.FC = () => {
         setError(response.message || "Gagal menyimpan surat jalan");
       }
     } catch (err) {
-      console.error("Error saving delivery order:", err);
       setError("Gagal menyimpan surat jalan. Silakan coba lagi.");
     } finally {
       setIsSaving(false);
@@ -520,7 +490,6 @@ export const DeliveryOrders: React.FC = () => {
         setError(response.message || "Gagal menghapus surat jalan");
       }
     } catch (err) {
-      console.error("Error deleting delivery order:", err);
       setError("Gagal menghapus surat jalan. Silakan coba lagi.");
     }
   };
@@ -530,7 +499,6 @@ export const DeliveryOrders: React.FC = () => {
       setError(null);
       setSuccess(null);
       setIsValidating(id);
-      console.log("Validating delivery order with ID:", id);
 
       // Find the delivery order to get its items
       const deliveryOrderToValidate = allDeliveryOrders.find(
@@ -574,10 +542,6 @@ export const DeliveryOrders: React.FC = () => {
               }
             );
 
-          console.log(
-            `Updated warehouse item: ${item.itemName}, reduced total by ${item.qty} and available stock by ${item.qty}`,
-            warehouseUpdateResponse
-          );
         }
       }
 
@@ -585,13 +549,8 @@ export const DeliveryOrders: React.FC = () => {
       const response = await apiClient.patchDeliveryOrder(id, {
         status: "validated",
       });
-      console.log("Validation response:", response);
-      console.log("Response data:", response.data);
 
       if (response.success) {
-        console.log(
-          "API call successful, updating local state and refreshing data..."
-        );
 
         // Update local store
         validateDeliveryOrder(id);
@@ -606,7 +565,6 @@ export const DeliveryOrders: React.FC = () => {
         // Show success message
         setSuccess("Surat jalan berhasil divalidasi dan diterbitkan! ✓");
         setIsValidating(null);
-        console.log("✓ Delivery order validated and warehouse stock reduced");
 
         // Auto-hide success message after 4 seconds
         setTimeout(() => setSuccess(null), 4000);
@@ -616,18 +574,12 @@ export const DeliveryOrders: React.FC = () => {
           "Gagal memvalidasi surat jalan. API mungkin menolak request.";
         setError(errorMsg);
         setIsValidating(null);
-        console.error("✗ Validation failed:", {
-          message: errorMsg,
-          response: response,
-          data: response.data,
-        });
       }
     } catch (err) {
       const errorMsg =
         err instanceof Error
           ? err.message
           : "Gagal memvalidasi surat jalan. Silakan coba lagi.";
-      console.error("✗ Error validating delivery order:", err);
       setError(errorMsg);
       setIsValidating(null);
     }

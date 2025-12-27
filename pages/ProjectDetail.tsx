@@ -106,7 +106,6 @@ export const ProjectDetail: React.FC = () => {
                   };
                 }
               } catch (error) {
-                console.error(`Error fetching BOM for item ${item.id}:`, error);
                 return {
                   itemId: item.id,
                   bomItems: []
@@ -129,9 +128,8 @@ export const ProjectDetail: React.FC = () => {
               const { itemId, bomItems } = result.value;
               bomData[itemId] = bomItems;
             } else {
-              // Handle rejected promises by logging and providing empty array
+              // Handle rejected promises by providing empty array
               const item = transformedItems[index];
-              console.error(`Failed to fetch BOM for item ${item.id}:`, result.reason);
               bomData[item.id] = [];
             }
           });
@@ -142,7 +140,6 @@ export const ProjectDetail: React.FC = () => {
         }
       } catch (err) {
         setError('Terjadi kesalahan saat memuat data');
-        console.error('Error fetching project data:', err);
       } finally {
         setIsLoading(false);
       }
@@ -159,7 +156,6 @@ export const ProjectDetail: React.FC = () => {
         setBomMaterials(response.data.data);
       }
     } catch (err) {
-      console.error('Failed to fetch materials:', err);
     } finally {
       setBomMaterialsLoading(false);
     }
@@ -178,7 +174,6 @@ export const ProjectDetail: React.FC = () => {
       setTasksError(null);
       try {
         const response = await apiClient.getTasks(1, 100, { project_id: id });
-        console.log('Tasks API Response:', response);
         if (response.success && response.data) {
           let taskList = [];
           // Handle different response formats
@@ -189,15 +184,12 @@ export const ProjectDetail: React.FC = () => {
           } else if (Array.isArray(response.data)) {
             taskList = response.data;
           }
-          console.log('Parsed Task List:', taskList);
           setApiTasks(taskList);
         } else {
           setTasksError(response.message || 'Gagal memuat data tugas');
-          console.error('API Error Response:', response);
         }
       } catch (err) {
         setTasksError(err instanceof Error ? err.message : 'Terjadi kesalahan saat memuat tugas');
-        console.error('Error fetching tasks:', err);
       } finally {
         setTasksLoading(false);
       }
@@ -223,7 +215,6 @@ export const ProjectDetail: React.FC = () => {
         setApiMachines(normalizedMachines);
       }
     } catch (err) {
-      console.error('Error fetching machines:', err);
     } finally {
       setMachinesLoading(false);
     }
@@ -263,7 +254,6 @@ export const ProjectDetail: React.FC = () => {
           setFinishedGoodsData(finishedGoodsList);
         }
       } catch (err) {
-        console.error('Error fetching finished goods:', err);
       } finally {
         setFinishedGoodsLoading(false);
       }
@@ -325,7 +315,6 @@ export const ProjectDetail: React.FC = () => {
       }
     } catch (err) {
       setError('Terjadi kesalahan saat menambah tugas');
-      console.error('Error adding task:', err);
     } finally {
       setIsSaving(false);
     }
@@ -367,17 +356,12 @@ export const ProjectDetail: React.FC = () => {
                   unit: project.unit
                 };
 
-                console.log('Updating finished goods warehouse with payload:', updatePayload);
-
                 const updateResponse = await apiClient.updateFinishedGoodsWarehouse(
                   existingRecord.id,
                   updatePayload
                 );
 
-                console.log('Finished goods update response:', updateResponse);
-
                 if (updateResponse.success && updateResponse.data) {
-                  console.log('✓ Updated finished goods warehouse record:', updateResponse.data);
                   // Refresh finished goods data
                   const refreshResponse = await apiClient.getFinishedGoodsWarehouses(1, 100, id);
                   if (refreshResponse.success && refreshResponse.data) {
@@ -390,7 +374,6 @@ export const ProjectDetail: React.FC = () => {
                     setFinishedGoodsData(finishedGoodsList);
                   }
                 } else {
-                  console.error('✗ Failed to update finished goods record:', updateResponse.message || 'Unknown error');
                   setError(`Gagal update record produk selesai: ${updateResponse.message || 'Unknown error'}`);
                 }
               } else {
@@ -404,24 +387,17 @@ export const ProjectDetail: React.FC = () => {
                   unit: project.unit
                 };
 
-                console.log('Creating finished goods warehouse with payload:', payload);
-
                 const createResponse = await apiClient.createFinishedGoodsWarehouse(payload);
 
-                console.log('Finished goods creation response:', createResponse);
-
                 if (createResponse.success && createResponse.data) {
-                  console.log('✓ Created finished goods warehouse record:', createResponse.data);
                   // Add to local state
                   setFinishedGoodsData([...finishedGoodsData, createResponse.data]);
                 } else {
-                  console.error('✗ Failed to create finished goods record:', createResponse.message || 'Unknown error');
                   setError(`Gagal membuat record produk selesai: ${createResponse.message || 'Unknown error'}`);
                 }
               }
             }
           } catch (err) {
-            console.error('Error creating/updating finished goods warehouse record:', err);
             // Don't fail the whole operation if finished goods record creation fails
           }
         }
@@ -430,7 +406,6 @@ export const ProjectDetail: React.FC = () => {
       }
     } catch (err) {
       setError('Terjadi kesalahan saat mengubah status tugas');
-      console.error('Error updating task status:', err);
     } finally {
       setIsSaving(false);
     }
@@ -452,13 +427,10 @@ export const ProjectDetail: React.FC = () => {
         setApiTasks(apiTasks.map(t => t.id === taskId ? response.data : t));
 
         // If this is the PACKING (final/finishing) step, create/update finished goods warehouse
-        console.log('📦 PACKING CHECK - step:', currentTask.step, 'completedQty:', completedQty, 'projectItems:', projectItems.length, 'project:', project?.name);
 
         if (currentTask.step === 'PACKING' && completedQty > 0) {
-          console.log('✨ PACKING TRIGGERED - Creating/updating finished goods warehouse');
           try {
             const projectItem = projectItems.find(i => i.id === currentTask.item_id);
-            console.log('📍 Found project item:', projectItem?.name, 'with id:', currentTask.item_id);
 
             if (projectItem && project) {
               // Check if finished goods record already exists for this project
@@ -480,19 +452,13 @@ export const ProjectDetail: React.FC = () => {
                   unit: project.unit
                 };
 
-                console.log('Updating finished goods warehouse with payload:', updatePayload);
-
                 const updateResponse = await apiClient.updateFinishedGoodsWarehouse(
                   existingRecord.id,
                   updatePayload
                 );
 
-                console.log('Finished goods update response:', updateResponse);
-
                 if (updateResponse.success && updateResponse.data) {
-                  console.log('✓ Updated finished goods warehouse record:', updateResponse.data);
                 } else {
-                  console.error('✗ Failed to update finished goods record:', updateResponse.message || 'Unknown error');
                 }
               } else {
                 // Create new finished goods record
@@ -505,48 +471,32 @@ export const ProjectDetail: React.FC = () => {
                   unit: project.unit
                 };
 
-                console.log('Creating finished goods warehouse with payload:', payload);
-
                 const createResponse = await apiClient.createFinishedGoodsWarehouse(payload);
 
-                console.log('Finished goods creation response:', createResponse);
-
                 if (createResponse.success && createResponse.data) {
-                  console.log('✅ Created finished goods warehouse record:', createResponse.data);
                   // Add to local state
                   const newData = [...finishedGoodsData, createResponse.data];
-                  console.log('📊 New finishedGoodsData:', newData);
                   setFinishedGoodsData(newData);
                 } else {
-                  console.error('❌ Failed to create finished goods record');
-                  console.error('  Response success:', createResponse.success);
-                  console.error('  Response data:', createResponse.data);
-                  console.error('  Response message:', createResponse.message);
-                  console.error('  Full response:', createResponse);
                 }
               }
             }
           } catch (err) {
-            console.error('Error creating/updating finished goods warehouse record:', err);
           }
 
           // Also reduce material stock and update realisasi
           const completedQuantityDifference = completedQty - (currentTask.completed_qty || 0);
-          console.log('Reducing stock for item:', currentTask.item_id, 'Quantity difference:', completedQuantityDifference);
 
           // Get the BOM items for this product item from the cached data
           const bomItems = bomItemsByItemId[currentTask.item_id] || [];
-          console.log('BOM Items for item', currentTask.item_id, ':', bomItems);
 
           if (bomItems.length === 0) {
-            console.warn('No BOM items found for item:', currentTask.item_id);
           }
 
           // Reduce stock for each material based on the quantity completed
           const updatePromises = bomItems.map(async (bomItem) => {
             if (bomItem.material_id && bomItem.id) {
               const quantityToReduce = completedQuantityDifference * (bomItem.quantity_per_unit || 0);
-              console.log('Reducing material:', bomItem.material_id, 'by quantity:', quantityToReduce);
 
               try {
                 const stockResponse = await apiClient.updateMaterialStock(
@@ -554,7 +504,6 @@ export const ProjectDetail: React.FC = () => {
                   quantityToReduce,
                   'reduce'
                 );
-                console.log('Stock update response:', stockResponse);
 
                 if (stockResponse.success) {
                   // Also update BOM item's realized quantity
@@ -562,7 +511,6 @@ export const ProjectDetail: React.FC = () => {
                   const bomUpdateResponse = await apiClient.updateBomItem(bomItem.id, {
                     realized: newRealized
                   });
-                  console.log('BOM item realized update response:', bomUpdateResponse);
 
                   // Update the local state to reflect the new realized value
                   setBomItemsByItemId(prev => ({
@@ -572,10 +520,8 @@ export const ProjectDetail: React.FC = () => {
                     )
                   }));
                 } else {
-                  console.error(`Failed to reduce stock for material ${bomItem.material_id}:`, stockResponse.message);
                 }
               } catch (err) {
-                console.error(`Error reducing stock for material ${bomItem.material_id}:`, err);
                 // Don't fail the whole operation if one material stock update fails
               }
             }
@@ -589,7 +535,6 @@ export const ProjectDetail: React.FC = () => {
       }
     } catch (err) {
       setError('Terjadi kesalahan saat mengubah kuantitas tugas');
-      console.error('Error updating task quantities:', err);
     } finally {
       setIsSaving(false);
     }
@@ -607,7 +552,6 @@ export const ProjectDetail: React.FC = () => {
         }
       } catch (err) {
         setError('Terjadi kesalahan saat menghapus tugas');
-        console.error('Error deleting task:', err);
       } finally {
         setIsSaving(false);
       }
@@ -625,7 +569,6 @@ export const ProjectDetail: React.FC = () => {
       }
     } catch (err) {
       setError('Terjadi kesalahan saat memulai downtime');
-      console.error('Error starting downtime:', err);
     } finally {
       setIsSaving(false);
     }
@@ -642,7 +585,6 @@ export const ProjectDetail: React.FC = () => {
       }
     } catch (err) {
       setError('Terjadi kesalahan saat menyelesaikan downtime');
-      console.error('Error ending downtime:', err);
     } finally {
       setIsSaving(false);
     }
@@ -714,7 +656,6 @@ export const ProjectDetail: React.FC = () => {
               );
             }
           } catch (err) {
-            console.error('Error marking item as workflow completed:', err);
           }
         }
       }
@@ -838,7 +779,6 @@ export const ProjectDetail: React.FC = () => {
       }
     } catch (err) {
       setError('Terjadi kesalahan saat memproses project');
-      console.error('Error processing project:', err);
     } finally {
       setIsSaving(false);
     }
@@ -954,7 +894,6 @@ export const ProjectDetail: React.FC = () => {
                   }
                 }
               } catch (taskErr) {
-                console.error('Error creating task for step:', taskErr);
               }
             }
           }
@@ -980,7 +919,6 @@ export const ProjectDetail: React.FC = () => {
       }
     } catch (err) {
       setError('Terjadi kesalahan saat menyimpan alur produksi');
-      console.error('Error saving workflow:', err);
     } finally {
       setIsSaving(false);
     }
@@ -1127,7 +1065,6 @@ export const ProjectDetail: React.FC = () => {
                               }
                             } catch (err) {
                               setError('Terjadi kesalahan saat mengunci BOM');
-                              console.error('Error locking BOM:', err);
                             } finally {
                               setIsSaving(false);
                             }
@@ -1170,7 +1107,6 @@ export const ProjectDetail: React.FC = () => {
                                        }
                                      } catch (err) {
                                        setError('Terjadi kesalahan saat menghapus BOM item');
-                                       console.error('Error deleting BOM item:', err);
                                      } finally {
                                        setIsSaving(false);
                                      }
@@ -1557,14 +1493,12 @@ export const ProjectDetail: React.FC = () => {
                                        for (const task of tasksToDelete) {
                                          const response = await apiClient.deleteTask(task.id!);
                                          if (!response.success) {
-                                           console.error('Failed to delete task:', task.id, response.message);
                                          }
                                        }
 
                                        setApiTasks(prev => prev.filter(t => !(t.step === s.step && String(t.item_id) === itemIdStr)));
                                      } catch (err) {
                                        setError('Terjadi kesalahan saat menghapus tugas');
-                                       console.error('Error deleting tasks:', err);
                                      } finally {
                                        setIsSaving(false);
                                      }
@@ -1685,7 +1619,6 @@ export const ProjectDetail: React.FC = () => {
                                 for (const task of tasksToDelete) {
                                   const response = await apiClient.deleteTask(task.id!);
                                   if (!response.success) {
-                                    console.error('Failed to delete task:', task.id, response.message);
                                   }
                                 }
 
@@ -1696,7 +1629,6 @@ export const ProjectDetail: React.FC = () => {
                                 )));
                               } catch (err) {
                                 setError('Terjadi kesalahan saat menghapus tugas');
-                                console.error('Error deleting tasks:', err);
                               } finally {
                                 setIsSaving(false);
                               }
@@ -1778,7 +1710,6 @@ export const ProjectDetail: React.FC = () => {
                   }
                 } catch (err) {
                   setError('Terjadi kesalahan saat menambah BOM item');
-                  console.error('Error adding BOM item:', err);
                 } finally {
                   setIsSaving(false);
                 }

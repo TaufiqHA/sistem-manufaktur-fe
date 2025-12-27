@@ -53,12 +53,10 @@ export const Warehouse: React.FC = () => {
             ? response.data
             : response.data.data || [];
           setFinishedGoodsWarehouses(warehouseList);
-          console.log("Finished goods warehouses loaded:", warehouseList);
         } else {
           setError(response.message || "Gagal memuat data gudang");
         }
       } catch (err) {
-        console.error("Error fetching warehouses:", err);
         setError("Terjadi kesalahan saat memuat data gudang");
       } finally {
         setIsLoading(false);
@@ -184,7 +182,6 @@ export const Warehouse: React.FC = () => {
 
       setEditingItem(null);
     } catch (err) {
-      console.error("Error validating item:", err);
       setError("Terjadi kesalahan saat memvalidasi item");
     } finally {
       setIsSaving(false);
@@ -246,12 +243,7 @@ export const Warehouse: React.FC = () => {
             unit: shippingItem.unit,
           });
 
-          console.log("Surat jalan created successfully:", sjCode);
         } else {
-          console.warn(
-            "Failed to create surat jalan:",
-            doResponse.message || "Unknown error"
-          );
         }
 
         // Refresh warehouse data
@@ -267,7 +259,6 @@ export const Warehouse: React.FC = () => {
         setError(response.message || "Gagal mengupdate pengiriman");
       }
     } catch (err) {
-      console.error("Error updating shipment:", err);
       setError("Terjadi kesalahan saat mengupdate pengiriman");
     } finally {
       setIsSaving(false);

@@ -18,7 +18,6 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
-    console.log('Auth token:', token ? 'EXISTS' : 'NOT FOUND');
   }, []);
 
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -39,18 +38,14 @@ export const Dashboard: React.FC = () => {
         setLoadingProjects(true);
         setErrorProjects(null);
         const response = await apiClient.getProjects();
-        console.log('Projects response:', response);
         if (response.success && response.data) {
           const projectList = Array.isArray(response.data) ? response.data : (response.data.data || []);
-          console.log('Projects list:', projectList);
           setProjects(projectList);
         } else {
-          console.error('Error fetching projects:', response.message || 'Unknown error');
           setErrorProjects(response.message || 'Failed to fetch projects');
           setProjects([]);
         }
       } catch (error) {
-        console.error('Error fetching projects:', error);
         setErrorProjects('Failed to fetch projects');
         setProjects([]);
       } finally {
@@ -71,12 +66,10 @@ export const Dashboard: React.FC = () => {
           const itemsList = Array.isArray(response.data) ? response.data : (response.data.data || []);
           setProjectItems(itemsList);
         } else {
-          console.error('Error fetching project items:', response.message || 'Unknown error');
           setErrorItems(response.message || 'Failed to fetch project items');
           setProjectItems([]);
         }
       } catch (error) {
-        console.error('Error fetching project items:', error);
         setErrorItems('Failed to fetch project items');
         setProjectItems([]);
       } finally {
@@ -93,18 +86,14 @@ export const Dashboard: React.FC = () => {
         setLoadingTasks(true);
         setErrorTasks(null);
         const response = await apiClient.getTasks(1, 100);
-        console.log('Tasks response:', response);
         if (response.success && response.data) {
           const taskList = Array.isArray(response.data) ? response.data : (response.data.data || []);
-          console.log('Tasks list:', taskList);
           setTasks(taskList);
         } else {
-          console.error('Error fetching tasks:', response.message || 'Unknown error');
           setErrorTasks(response.message || 'Failed to fetch tasks');
           setTasks([]);
         }
       } catch (error) {
-        console.error('Error fetching tasks:', error);
         setErrorTasks('Failed to fetch tasks');
         setTasks([]);
       } finally {
@@ -125,12 +114,10 @@ export const Dashboard: React.FC = () => {
           const machinesList = Array.isArray(response.data) ? response.data : (response.data.data || []);
           setMachines(machinesList);
         } else {
-          console.error('Error fetching machines:', response.message || 'Unknown error');
           setErrorMachines(response.message || 'Failed to fetch machines');
           setMachines([]);
         }
       } catch (error) {
-        console.error('Error fetching machines:', error);
         setErrorMachines('Failed to fetch machines');
         setMachines([]);
       } finally {
@@ -151,12 +138,10 @@ export const Dashboard: React.FC = () => {
           const materialsList = Array.isArray(response.data) ? response.data : (response.data.data || []);
           setMaterials(materialsList);
         } else {
-          console.error('Error fetching materials:', response.message || 'Unknown error');
           setErrorMaterials(response.message || 'Failed to fetch materials');
           setMaterials([]);
         }
       } catch (error) {
-        console.error('Error fetching materials:', error);
         setErrorMaterials('Failed to fetch materials');
         setMaterials([]);
       } finally {
