@@ -58,6 +58,7 @@ export const Warehouse: React.FC = () => {
         shippedQty: warehouse.shipped_qty || 0,
         availableStock: warehouse.available_stock || 0,
         unit: warehouse.unit || 'pcs',
+        status: warehouse.status || 'not validate',
         createdAt: warehouse.created_at,
         updatedAt: warehouse.updated_at
       };
@@ -88,17 +89,57 @@ export const Warehouse: React.FC = () => {
     return processedWarehouseItems.find(i => i.id === historyItem) || processedItems.find(i => i.id === historyItem);
   }, [processedWarehouseItems, processedItems, historyItem]);
 
-  const validationList = processedItems.filter(p => p.pendingValidation > 0);
-  const warehouseList = processedWarehouseItems.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const validationList = [
+    ...processedItems.filter(p => p.pendingValidation > 0),
+    ...processedWarehouseItems.filter(p => p.status === 'not validate')
+  ];
+  const warehouseList = processedWarehouseItems.filter(p => p.status === 'validated' && p.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const itemHistory = useMemo(() => {
     if (!historyItem) return [];
     return logs.filter(l => l.itemId === historyItem && (l.type === 'OUTPUT' && l.step === 'QC' || l.type === 'WAREHOUSE_ENTRY'));
   }, [logs, historyItem]);
 
-  const handleValidate = (id: string, qty: number) => {
-    validateToWarehouse(id, qty);
-    setEditingItem(null);
+  const handleValidate = async (id: string, qty: number) => {
+    setIsSaving(true);
+    try {
+      // Check if it's an API item (has status field) or local item
+      const warehouseItem = finishedGoodsWarehouses.find(item => item.id?.toString() === id);
+
+      if (warehouseItem) {
+        // Update API warehouse item status to "validated"
+        const response = await apiClient.updateFinishedGoodsWarehouse(id, {
+          project_id: warehouseItem.project_id,
+          item_name: warehouseItem.item_name,
+          total_produced: warehouseItem.total_produced,
+          shipped_qty: warehouseItem.shipped_qty,
+          available_stock: warehouseItem.available_stock,
+          unit: warehouseItem.unit,
+          status: 'validated'
+        });
+
+        if (response.success) {
+          // Refresh warehouse data
+          const warehouseResponse = await apiClient.getFinishedGoodsWarehouses();
+          if (warehouseResponse.success && warehouseResponse.data) {
+            const warehouseList = Array.isArray(warehouseResponse.data) ? warehouseResponse.data : (warehouseResponse.data.data || []);
+            setFinishedGoodsWarehouses(warehouseList);
+          }
+        } else {
+          setError(response.message || 'Gagal mengupdate status validasi');
+        }
+      } else {
+        // For local items, use store validation
+        validateToWarehouse(id, qty);
+      }
+
+      setEditingItem(null);
+    } catch (err) {
+      console.error('Error validating item:', err);
+      setError('Terjadi kesalahan saat memvalidasi item');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleShipment = async () => {
@@ -173,24 +214,30 @@ export const Warehouse: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-bold">
-                {validationList.map(item => (
-                  <tr key={item.id} className="hover:bg-slate-50/50">
-                    <td className="px-8 py-5 uppercase">{item.name}</td>
-                    <td className="px-8 py-5 text-blue-600 text-[10px] uppercase">{item.projectName}</td>
-                    <td className="px-8 py-5 text-center text-slate-400">{item.totalPassedQC}</td>
-                    <td className="px-8 py-5 text-center">
-                      <span className="text-emerald-600 font-black text-lg">+{item.pendingValidation}</span>
-                    </td>
-                    <td className="px-8 py-5 text-right">
-                      <button 
-                        onClick={() => setEditingItem({ id: item.id, name: item.name, qty: item.pendingValidation })}
-                        className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-2 ml-auto"
-                      >
-                        VALIDASI MANUAL <Edit3 size={14}/>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {validationList.map(item => {
+                  const isApiItem = 'status' in item && item.status !== undefined;
+                  const qtyToValidate = isApiItem ? item.availableStock : item.pendingValidation;
+                  const totalQty = isApiItem ? item.totalProduced : item.totalPassedQC;
+
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50/50">
+                      <td className="px-8 py-5 uppercase">{item.name}</td>
+                      <td className="px-8 py-5 text-blue-600 text-[10px] uppercase">{item.projectName}</td>
+                      <td className="px-8 py-5 text-center text-slate-400">{totalQty}</td>
+                      <td className="px-8 py-5 text-center">
+                        <span className="text-emerald-600 font-black text-lg">+{qtyToValidate}</span>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                        <button
+                          onClick={() => setEditingItem({ id: item.id, name: item.name, qty: qtyToValidate })}
+                          className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-2 ml-auto"
+                        >
+                          VALIDASI MANUAL <Edit3 size={14}/>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {validationList.length === 0 && (
                   <tr><td colSpan={5} className="py-20 text-center text-slate-300 font-black italic uppercase text-xs">Belum ada barang baru dari QC.</td></tr>
                 )}
@@ -302,10 +349,10 @@ export const Warehouse: React.FC = () => {
             <h3 className="text-xl font-black text-slate-900 uppercase">Validasi Qty Masuk</h3>
             <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-widest mb-8">{editingItem.name}</p>
             <div className="space-y-6">
-              <input type="number" className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-[28px] text-4xl font-black text-center outline-none focus:border-blue-500 transition-all" value={editingItem.qty} onChange={e => setEditingItem({...editingItem, qty: Number(e.target.value)})} />
+              <input type="number" disabled={isSaving} className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-[28px] text-4xl font-black text-center outline-none focus:border-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed" value={editingItem.qty} onChange={e => setEditingItem({...editingItem, qty: Number(e.target.value)})} />
               <div className="flex flex-col gap-3">
-                <button onClick={() => handleValidate(editingItem.id, editingItem.qty)} className="w-full py-5 bg-slate-900 text-white rounded-[24px] font-black uppercase text-sm tracking-widest shadow-xl flex items-center justify-center gap-3"><Save size={18}/> SIMPAN KE GUDANG</button>
-                <button onClick={() => setEditingItem(null)} className="text-slate-400 font-black text-[10px] uppercase tracking-widest py-2">Batalkan</button>
+                <button onClick={() => handleValidate(editingItem.id, editingItem.qty)} disabled={isSaving} className="w-full py-5 bg-slate-900 text-white rounded-[24px] font-black uppercase text-sm tracking-widest shadow-xl flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"><Save size={18}/> {isSaving ? 'MENYIMPAN...' : 'SIMPAN KE GUDANG'}</button>
+                <button onClick={() => setEditingItem(null)} disabled={isSaving} className="text-slate-400 font-black text-[10px] uppercase tracking-widest py-2 disabled:opacity-50">Batalkan</button>
               </div>
             </div>
           </div>

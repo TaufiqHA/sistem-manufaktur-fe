@@ -107,6 +107,7 @@ Retrieve details of a specific finished goods warehouse.
     "shipped_qty": 200,
     "available_stock": 800,
     "unit": "pcs",
+    "status": "not validate",
     "created_at": "2025-12-25T10:30:00.000000Z",
     "updated_at": "2025-12-25T10:30:00.000000Z",
     "project": {
@@ -145,7 +146,8 @@ Create a new finished goods warehouse record.
     "total_produced": 500,
     "shipped_qty": 0,
     "available_stock": 500,
-    "unit": "pcs"
+    "unit": "pcs",
+    "status": "not validate"
 }
 ```
 
@@ -156,6 +158,7 @@ Create a new finished goods warehouse record.
 - **shipped_qty** (integer, required): Quantity shipped.
 - **available_stock** (integer, required): Available stock quantity.
 - **unit** (string, required): Unit of measurement (e.g., pcs, kg, meter).
+- **status** (string, optional): Status of the warehouse item (either 'not validate' or 'validated', defaults to 'not validate').
 
 #### Response
 - **Status Code:** 201 Created
@@ -170,6 +173,7 @@ Create a new finished goods warehouse record.
     "shipped_qty": 0,
     "available_stock": 500,
     "unit": "pcs",
+    "status": "not validate",
     "created_at": "2025-12-25T10:30:00.000000Z",
     "updated_at": "2025-12-25T10:30:00.000000Z"
 }
@@ -198,6 +202,7 @@ Update an existing finished goods warehouse record.
 - **shipped_qty** (integer, required): Quantity shipped.
 - **available_stock** (integer, required): Available stock quantity.
 - **unit** (string, required): Unit of measurement (e.g., pcs, kg, meter).
+- **status** (string, optional): Status of the warehouse item (either 'not validate' or 'validated').
 
 #### Request Body
 ```json
@@ -207,7 +212,8 @@ Update an existing finished goods warehouse record.
     "total_produced": 600,
     "shipped_qty": 100,
     "available_stock": 500,
-    "unit": "pcs"
+    "unit": "pcs",
+    "status": "validated"
 }
 ```
 
@@ -224,6 +230,7 @@ Update an existing finished goods warehouse record.
     "shipped_qty": 100,
     "available_stock": 500,
     "unit": "pcs",
+    "status": "validated",
     "created_at": "2025-12-25T10:30:00.000000Z",
     "updated_at": "2025-12-25T10:35:00.000000Z"
 }
@@ -266,6 +273,7 @@ Delete a finished goods warehouse record.
 - `shipped_qty`: Required, integer, minimum 0
 - `available_stock`: Required, integer, minimum 0
 - `unit`: Required, string, max 50 characters
+- `status`: Optional, enum (either 'not validate' or 'validated')
 
 ### Business Logic Validation
 - `available_stock` must not exceed `total_produced`
