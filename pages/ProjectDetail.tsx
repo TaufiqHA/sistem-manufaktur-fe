@@ -810,6 +810,40 @@ export const ProjectDetail: React.FC = () => {
     setIsConfigModalOpen(item.id);
   };
 
+  const handleProcessProject = async () => {
+    if (!project) return;
+
+    setIsSaving(true);
+    try {
+      const response = await apiClient.updateProject(project.id, {
+        code: project.code,
+        name: project.name,
+        customer: project.customer,
+        start_date: project.start_date,
+        deadline: project.deadline,
+        status: 'IN_PROGRESS',
+        progress: project.progress,
+        qty_per_unit: project.qty_per_unit,
+        procurement_qty: project.procurement_qty,
+        total_qty: project.total_qty,
+        unit: project.unit,
+        is_locked: project.is_locked || false
+      });
+
+      if (response.success && response.data) {
+        setProject(response.data);
+        setError(null);
+      } else {
+        setError(response.message || 'Gagal memproses project');
+      }
+    } catch (err) {
+      setError('Terjadi kesalahan saat memproses project');
+      console.error('Error processing project:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSaveWorkflow = async () => {
     if (!isConfigModalOpen) return;
 
@@ -955,7 +989,7 @@ export const ProjectDetail: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* HEADER STATS */}
-      <div className="bg-white rounded-[40px] p-8 shadow-sm border border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10">
+      <div className="bg-white rounded-[40px] p-8 shadow-sm border border-slate-100 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10">
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             <h1 className="text-3xl font-black text-slate-900 leading-tight uppercase tracking-tighter">{project.name}</h1>
@@ -975,22 +1009,33 @@ export const ProjectDetail: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="w-full lg:w-72 bg-slate-900 p-8 rounded-[32px] text-white shadow-2xl relative overflow-hidden group">
-           <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-all duration-700"><TrendingUp size={80}/></div>
-           <div className="flex justify-between items-end mb-4 relative z-10">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Sisa {daysLeft} Hari</span>
-              <span className="text-3xl font-black">{project?.progress ?? 0}%</span>
-           </div>
-           <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-6">
-              <div className="bg-blue-500 h-full transition-all duration-1000" style={{width: `${project?.progress ?? 0}%`}} />
-           </div>
-           <div className="h-10 w-full opacity-50">
-              <ResponsiveContainer width="100%" height="100%">
-                 <AreaChart data={sCurveData}>
-                    <Area type="monotone" dataKey="actual" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} strokeWidth={2} />
-                 </AreaChart>
-              </ResponsiveContainer>
-           </div>
+        <div className="flex flex-col gap-6 items-stretch lg:items-end w-full lg:w-auto">
+          <div className="w-full lg:w-72 bg-slate-900 p-8 rounded-[32px] text-white shadow-2xl relative overflow-hidden group">
+             <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-all duration-700"><TrendingUp size={80}/></div>
+             <div className="flex justify-between items-end mb-4 relative z-10">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Sisa {daysLeft} Hari</span>
+                <span className="text-3xl font-black">{project?.progress ?? 0}%</span>
+             </div>
+             <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-6">
+                <div className="bg-blue-500 h-full transition-all duration-1000" style={{width: `${project?.progress ?? 0}%`}} />
+             </div>
+             <div className="h-10 w-full opacity-50">
+                <ResponsiveContainer width="100%" height="100%">
+                   <AreaChart data={sCurveData}>
+                      <Area type="monotone" dataKey="actual" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} strokeWidth={2} />
+                   </AreaChart>
+                </ResponsiveContainer>
+             </div>
+          </div>
+          {project.status !== 'IN_PROGRESS' && (
+            <button
+              onClick={handleProcessProject}
+              disabled={isSaving}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl transition-all flex items-center justify-center gap-2 w-full lg:w-72"
+            >
+              <Hammer size={20}/> PROCESS PROJECT
+            </button>
+          )}
         </div>
       </div>
 
@@ -1008,9 +1053,11 @@ export const ProjectDetail: React.FC = () => {
         <div className="space-y-12 pb-20">
           <div className="flex justify-between items-center px-4">
              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Daftar Item Produksi</h2>
-             <button onClick={() => setIsItemModalOpen(true)} className="bg-blue-600 text-white px-8 py-3.5 rounded-2xl font-black text-sm flex items-center gap-3 shadow-xl hover:scale-105 transition-all">
-               <Plus size={20}/> TAMBAH ITEM
-             </button>
+             {project.status !== 'IN_PROGRESS' && (
+               <button onClick={() => setIsItemModalOpen(true)} className="bg-blue-600 text-white px-8 py-3.5 rounded-2xl font-black text-sm flex items-center gap-3 shadow-xl hover:scale-105 transition-all">
+                 <Plus size={20}/> TAMBAH ITEM
+               </button>
+             )}
           </div>
 
           {projectItems.map((item, idx) => {
@@ -1053,9 +1100,9 @@ export const ProjectDetail: React.FC = () => {
                     <div className="flex gap-3 ml-4">
                       {!item.is_bom_locked ? (
                         <button onClick={() => setIsBomModalOpen(item.id!.toString())} className="bg-amber-500 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-amber-600 transition-all flex items-center gap-2"><Hammer size={16}/> Kelola BOM</button>
-                      ) : (
+                      ) : project.status !== 'IN_PROGRESS' ? (
                         <button onClick={() => startWorkflowConfig(item)} className={`px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg transition-all flex items-center gap-2 ${item.is_workflow_locked ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}><Settings2 size={16}/> {item.is_workflow_locked ? 'Edit Alur' : 'Set Alur Mesin'}</button>
-                      )}
+                      ) : null}
                       <button onClick={() => handleDeleteItem(item.id!)} disabled={isSaving} className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all disabled:opacity-50"><Trash2 size={20}/></button>
                     </div>
                   </div>

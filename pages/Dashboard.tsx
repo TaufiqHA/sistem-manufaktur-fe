@@ -16,6 +16,11 @@ export const Dashboard: React.FC = () => {
   const [machines, setMachines] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
 
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    console.log('Auth token:', token ? 'EXISTS' : 'NOT FOUND');
+  }, []);
+
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingItems, setLoadingItems] = useState(true);
   const [loadingTasks, setLoadingTasks] = useState(true);
@@ -34,13 +39,20 @@ export const Dashboard: React.FC = () => {
         setLoadingProjects(true);
         setErrorProjects(null);
         const response = await apiClient.getProjects();
+        console.log('Projects response:', response);
         if (response.success && response.data) {
-          setProjects(response.data.data || []);
+          const projectList = Array.isArray(response.data) ? response.data : (response.data.data || []);
+          console.log('Projects list:', projectList);
+          setProjects(projectList);
         } else {
+          console.error('Error fetching projects:', response.message || 'Unknown error');
           setErrorProjects(response.message || 'Failed to fetch projects');
+          setProjects([]);
         }
       } catch (error) {
-        setErrorProjects(error instanceof Error ? error.message : 'An error occurred');
+        console.error('Error fetching projects:', error);
+        setErrorProjects('Failed to fetch projects');
+        setProjects([]);
       } finally {
         setLoadingProjects(false);
       }
@@ -56,12 +68,17 @@ export const Dashboard: React.FC = () => {
         setErrorItems(null);
         const response = await apiClient.getProjectItems(1, 15);
         if (response.success && response.data) {
-          setProjectItems(response.data.data || []);
+          const itemsList = Array.isArray(response.data) ? response.data : (response.data.data || []);
+          setProjectItems(itemsList);
         } else {
+          console.error('Error fetching project items:', response.message || 'Unknown error');
           setErrorItems(response.message || 'Failed to fetch project items');
+          setProjectItems([]);
         }
       } catch (error) {
-        setErrorItems(error instanceof Error ? error.message : 'An error occurred');
+        console.error('Error fetching project items:', error);
+        setErrorItems('Failed to fetch project items');
+        setProjectItems([]);
       } finally {
         setLoadingItems(false);
       }
@@ -76,13 +93,20 @@ export const Dashboard: React.FC = () => {
         setLoadingTasks(true);
         setErrorTasks(null);
         const response = await apiClient.getTasks(1, 100);
+        console.log('Tasks response:', response);
         if (response.success && response.data) {
-          setTasks(response.data.data || []);
+          const taskList = Array.isArray(response.data) ? response.data : (response.data.data || []);
+          console.log('Tasks list:', taskList);
+          setTasks(taskList);
         } else {
+          console.error('Error fetching tasks:', response.message || 'Unknown error');
           setErrorTasks(response.message || 'Failed to fetch tasks');
+          setTasks([]);
         }
       } catch (error) {
-        setErrorTasks(error instanceof Error ? error.message : 'An error occurred');
+        console.error('Error fetching tasks:', error);
+        setErrorTasks('Failed to fetch tasks');
+        setTasks([]);
       } finally {
         setLoadingTasks(false);
       }
@@ -98,12 +122,17 @@ export const Dashboard: React.FC = () => {
         setErrorMachines(null);
         const response = await apiClient.getMachines();
         if (response.success && response.data) {
-          setMachines(response.data.data || []);
+          const machinesList = Array.isArray(response.data) ? response.data : (response.data.data || []);
+          setMachines(machinesList);
         } else {
+          console.error('Error fetching machines:', response.message || 'Unknown error');
           setErrorMachines(response.message || 'Failed to fetch machines');
+          setMachines([]);
         }
       } catch (error) {
-        setErrorMachines(error instanceof Error ? error.message : 'An error occurred');
+        console.error('Error fetching machines:', error);
+        setErrorMachines('Failed to fetch machines');
+        setMachines([]);
       } finally {
         setLoadingMachines(false);
       }
@@ -119,12 +148,17 @@ export const Dashboard: React.FC = () => {
         setErrorMaterials(null);
         const response = await apiClient.getMaterials(1, 100);
         if (response.success && response.data) {
-          setMaterials(response.data.data || []);
+          const materialsList = Array.isArray(response.data) ? response.data : (response.data.data || []);
+          setMaterials(materialsList);
         } else {
+          console.error('Error fetching materials:', response.message || 'Unknown error');
           setErrorMaterials(response.message || 'Failed to fetch materials');
+          setMaterials([]);
         }
       } catch (error) {
-        setErrorMaterials(error instanceof Error ? error.message : 'An error occurred');
+        console.error('Error fetching materials:', error);
+        setErrorMaterials('Failed to fetch materials');
+        setMaterials([]);
       } finally {
         setLoadingMaterials(false);
       }
@@ -134,6 +168,11 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const activeProjects = projects.filter(p => p.status === 'IN_PROGRESS').length;
+  const plannedProjects = projects.filter(p => p.status === 'PLANNED').length;
+  const completedProjects = projects.filter(p => p.status === 'COMPLETED').length;
+  const onHoldProjects = projects.filter(p => p.status === 'ON_HOLD').length;
+  const cancelledProjects = projects.filter(p => p.status === 'CANCELLED').length;
+
   const activeTasks = tasks.filter(t => t.status === 'IN_PROGRESS').length;
   const completedTasks = tasks.filter(t => t.status === 'COMPLETED').length;
 
@@ -171,12 +210,12 @@ export const Dashboard: React.FC = () => {
 
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">Active Tasks</p>
-            <p className="text-3xl font-bold text-slate-900 mt-2">{loadingTasks ? '-' : activeTasks}</p>
-            {errorTasks && <p className="text-xs text-red-500 mt-2">{errorTasks}</p>}
+            <p className="text-sm font-medium text-slate-500">Planned Projects</p>
+            <p className="text-3xl font-bold text-slate-900 mt-2">{loadingProjects ? '-' : plannedProjects}</p>
+            {errorProjects && <p className="text-xs text-red-500 mt-2">{errorProjects}</p>}
           </div>
           <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
-            <Activity size={24} />
+            <Briefcase size={24} />
           </div>
         </div>
 
