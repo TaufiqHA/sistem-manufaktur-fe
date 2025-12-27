@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import {
-  LayoutDashboard, FolderKanban, Factory, MonitorPlay, Settings, Users, PackageSearch, Menu, X, Wrench, LogOut, BarChart3, ShoppingCart, Warehouse
+  LayoutDashboard, FolderKanban, Factory, MonitorPlay, Settings, Users, PackageSearch, Menu, X, Wrench, LogOut, BarChart3, ShoppingCart, Warehouse, Truck
 } from 'lucide-react';
 import { ModuleName } from '../types';
 
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { label: 'Projects', icon: FolderKanban, path: '/projects', module: 'PROJECTS' as ModuleName },
   { label: 'Pengadaan', icon: ShoppingCart, path: '/procurement', module: 'PROCUREMENT' as ModuleName },
   { label: 'Gudang Jadi', icon: Warehouse, path: '/warehouse', module: 'WAREHOUSE' as ModuleName },
+  { label: 'Surat Jalan', icon: Truck, path: '/delivery-orders', module: 'DELIVERY_ORDERS' as ModuleName },
   { label: 'Master Mesin', icon: Wrench, path: '/machines', module: 'MACHINES' as ModuleName },
   { label: 'Materials', icon: PackageSearch, path: '/materials', module: 'MATERIALS' as ModuleName },
   { label: 'Operator Board', icon: Factory, path: '/machine-board', module: 'MACHINES' as ModuleName },

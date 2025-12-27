@@ -157,7 +157,8 @@ export type ModuleName =
   | "REPORTS"
   | "DASHBOARD"
   | "PROCUREMENT"
-  | "WAREHOUSE";
+  | "WAREHOUSE"
+  | "DELIVERY_ORDERS";
 export interface ModulePermission {
   view: boolean;
   create: boolean;
@@ -253,6 +254,28 @@ export interface PurchaseOrder {
   items: ProcurementItem[];
   grandTotal: number;
   status: 'OPEN' | 'RECEIVED';
+}
+
+export interface DeliveryOrderItem {
+  projectId: string;
+  projectName: string;
+  itemId: string;
+  itemName: string;
+  qty: number;
+  unit: string;
+}
+
+export interface DeliveryOrder {
+  id: string;
+  code: string;
+  date: string;
+  customer: string;
+  address: string;
+  driverName: string;
+  vehiclePlate: string;
+  items: DeliveryOrderItem[];
+  status: 'DRAFT' | 'VALIDATED' | 'SENT' | 'CANCELLED';
+  note?: string;
 }
 
 export interface ReceivingGoods {

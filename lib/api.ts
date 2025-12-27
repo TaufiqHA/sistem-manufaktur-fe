@@ -885,6 +885,126 @@ interface ReceivingItemUpdateRequest {
   qty?: number;
 }
 
+// Delivery Order Data Types
+interface DeliveryOrderData {
+  id?: number | string;
+  code: string;
+  date: string;
+  customer: string;
+  address: string;
+  driver_name: string;
+  vehicle_plate: string;
+  status?: "DRAFT" | "VALIDATED" | "SENT" | "CANCELLED";
+  note?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface DeliveryOrdersListResponse {
+  data: DeliveryOrderData[];
+  links?: {
+    first?: string;
+    last?: string;
+    prev?: string;
+    next?: string;
+  };
+  meta?: {
+    current_page: number;
+    from: number;
+    last_page: number;
+    path: string;
+    per_page: number;
+    to: number;
+    total: number;
+  };
+}
+
+interface DeliveryOrderResponse {
+  data: DeliveryOrderData;
+}
+
+interface DeliveryOrderCreateRequest {
+  code: string;
+  date: string;
+  customer: string;
+  address: string;
+  driver_name: string;
+  vehicle_plate: string;
+  status?: "DRAFT" | "VALIDATED" | "SENT" | "CANCELLED";
+  note?: string | null;
+}
+
+interface DeliveryOrderUpdateRequest {
+  code?: string;
+  date?: string;
+  customer?: string;
+  address?: string;
+  driver_name?: string;
+  vehicle_plate?: string;
+  status?: "DRAFT" | "VALIDATED" | "SENT" | "CANCELLED";
+  note?: string | null;
+}
+
+// Delivery Order Item Data Types
+interface DeliveryOrderItemData {
+  id?: number | string;
+  delivery_order_id: number | string;
+  warehouse_id: number | string;
+  project_id: number | string;
+  project_name: string;
+  item_name: string;
+  qty: number;
+  unit: string;
+  created_at?: string;
+  updated_at?: string;
+  delivery_order?: DeliveryOrderData;
+  warehouse?: any;
+  project?: any;
+}
+
+interface DeliveryOrderItemsListResponse {
+  data: DeliveryOrderItemData[];
+  links?: {
+    first?: string;
+    last?: string;
+    prev?: string;
+    next?: string;
+  };
+  meta?: {
+    current_page: number;
+    from: number;
+    last_page: number;
+    path: string;
+    per_page: number;
+    to: number;
+    total: number;
+  };
+}
+
+interface DeliveryOrderItemResponse {
+  data: DeliveryOrderItemData;
+}
+
+interface DeliveryOrderItemCreateRequest {
+  delivery_order_id: number | string;
+  warehouse_id: number | string;
+  project_id: number | string;
+  project_name: string;
+  item_name: string;
+  qty: number;
+  unit: string;
+}
+
+interface DeliveryOrderItemUpdateRequest {
+  delivery_order_id?: number | string;
+  warehouse_id?: number | string;
+  project_id?: number | string;
+  project_name?: string;
+  item_name?: string;
+  qty?: number;
+  unit?: string;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -2149,12 +2269,7 @@ class ApiClient {
   }
 
   async createFinishedGoodsWarehouse(data: any): Promise<ApiResponse<any>> {
-    return this.request<any>(
-      "/finished-goods-warehouses",
-      "POST",
-      data,
-      true
-    );
+    return this.request<any>("/finished-goods-warehouses", "POST", data, true);
   }
 
   async updateFinishedGoodsWarehouse(
@@ -2174,6 +2289,152 @@ class ApiClient {
   ): Promise<ApiResponse<any>> {
     return this.request<any>(
       `/finished-goods-warehouses/${id}`,
+      "DELETE",
+      {},
+      true
+    );
+  }
+
+  // Delivery Order API Methods
+  async getDeliveryOrders(
+    page: number = 1,
+    perPage: number = 10
+  ): Promise<ApiResponse<DeliveryOrdersListResponse>> {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("per_page", perPage.toString());
+    return this.request<DeliveryOrdersListResponse>(
+      `/delivery-orders?${params.toString()}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getDeliveryOrder(
+    id: string | number
+  ): Promise<ApiResponse<DeliveryOrderResponse>> {
+    return this.request<DeliveryOrderResponse>(
+      `/delivery-orders/${id}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async createDeliveryOrder(
+    data: DeliveryOrderCreateRequest
+  ): Promise<ApiResponse<DeliveryOrderResponse>> {
+    return this.request<DeliveryOrderResponse>(
+      "/delivery-orders",
+      "POST",
+      data,
+      true
+    );
+  }
+
+  async updateDeliveryOrder(
+    id: string | number,
+    data: DeliveryOrderUpdateRequest
+  ): Promise<ApiResponse<DeliveryOrderResponse>> {
+    return this.request<DeliveryOrderResponse>(
+      `/delivery-orders/${id}`,
+      "PUT",
+      data,
+      true
+    );
+  }
+
+  async patchDeliveryOrder(
+    id: string | number,
+    data: Partial<DeliveryOrderUpdateRequest>
+  ): Promise<ApiResponse<DeliveryOrderResponse>> {
+    return this.request<DeliveryOrderResponse>(
+      `/delivery-orders/${id}`,
+      "PATCH",
+      data,
+      true
+    );
+  }
+
+  async deleteDeliveryOrder(
+    id: string | number
+  ): Promise<ApiResponse<DeleteResponse>> {
+    return this.request<DeleteResponse>(
+      `/delivery-orders/${id}`,
+      "DELETE",
+      {},
+      true
+    );
+  }
+
+  // Delivery Order Items API Methods
+  async getDeliveryOrderItems(
+    page: number = 1,
+    perPage: number = 10
+  ): Promise<ApiResponse<DeliveryOrderItemsListResponse>> {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("per_page", perPage.toString());
+    return this.request<DeliveryOrderItemsListResponse>(
+      `/delivery-order-items?${params.toString()}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getDeliveryOrderItem(
+    id: string | number
+  ): Promise<ApiResponse<DeliveryOrderItemResponse>> {
+    return this.request<DeliveryOrderItemResponse>(
+      `/delivery-order-items/${id}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async createDeliveryOrderItem(
+    data: DeliveryOrderItemCreateRequest
+  ): Promise<ApiResponse<DeliveryOrderItemResponse>> {
+    return this.request<DeliveryOrderItemResponse>(
+      "/delivery-order-items",
+      "POST",
+      data,
+      true
+    );
+  }
+
+  async updateDeliveryOrderItem(
+    id: string | number,
+    data: DeliveryOrderItemUpdateRequest
+  ): Promise<ApiResponse<DeliveryOrderItemResponse>> {
+    return this.request<DeliveryOrderItemResponse>(
+      `/delivery-order-items/${id}`,
+      "PUT",
+      data,
+      true
+    );
+  }
+
+  async patchDeliveryOrderItem(
+    id: string | number,
+    data: Partial<DeliveryOrderItemUpdateRequest>
+  ): Promise<ApiResponse<DeliveryOrderItemResponse>> {
+    return this.request<DeliveryOrderItemResponse>(
+      `/delivery-order-items/${id}`,
+      "PATCH",
+      data,
+      true
+    );
+  }
+
+  async deleteDeliveryOrderItem(
+    id: string | number
+  ): Promise<ApiResponse<DeleteResponse>> {
+    return this.request<DeleteResponse>(
+      `/delivery-order-items/${id}`,
       "DELETE",
       {},
       true
@@ -2274,4 +2535,14 @@ export type {
   ReceivingItemResponse,
   ReceivingItemCreateRequest,
   ReceivingItemUpdateRequest,
+  DeliveryOrderData,
+  DeliveryOrdersListResponse,
+  DeliveryOrderResponse,
+  DeliveryOrderCreateRequest,
+  DeliveryOrderUpdateRequest,
+  DeliveryOrderItemData,
+  DeliveryOrderItemsListResponse,
+  DeliveryOrderItemResponse,
+  DeliveryOrderItemCreateRequest,
+  DeliveryOrderItemUpdateRequest,
 };

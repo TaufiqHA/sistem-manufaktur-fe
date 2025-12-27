@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import {
   Project, Material, ProjectItem, Machine, Task, User, UnitMaster, ProductionLog,
   TaskStatus, ModuleName, ItemStepConfig, Shift, MachinePersonnel, ProcessStep,
-  Supplier, RFQ, PurchaseOrder, ReceivingGoods
+  Supplier, RFQ, PurchaseOrder, ReceivingGoods, DeliveryOrder
 } from '../types';
 import {
   MOCK_PROJECTS, MOCK_MATERIALS, MOCK_ITEMS, MOCK_MACHINES, MOCK_TASKS, MOCK_USERS, MOCK_UNITS, MOCK_LOGS,
@@ -23,6 +23,7 @@ interface AppState {
   rfqs: RFQ[];
   pos: PurchaseOrder[];
   receivings: ReceivingGoods[];
+  deliveryOrders: DeliveryOrder[];
 
   can: (action: 'view' | 'create' | 'edit' | 'delete', module: ModuleName) => boolean;
   login: (username: string) => boolean;
@@ -69,6 +70,12 @@ interface AppState {
   addRFQ: (r: RFQ) => void;
   createPO: (p: PurchaseOrder) => void;
   receiveGoods: (bd: ReceivingGoods) => void;
+
+  // Delivery Order methods
+  createDeliveryOrder: (deliveryOrder: DeliveryOrder) => void;
+  updateDeliveryOrder: (deliveryOrder: DeliveryOrder) => void;
+  deleteDeliveryOrder: (id: string) => void;
+  validateDeliveryOrder: (id: string) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -85,6 +92,7 @@ export const useStore = create<AppState>((set, get) => ({
   rfqs: MOCK_RFQS,
   pos: MOCK_POS,
   receivings: MOCK_RECEIVINGS,
+  deliveryOrders: [],
 
   can: (action, module) => {
     const user = get().currentUser;
@@ -365,6 +373,48 @@ export const useStore = create<AppState>((set, get) => ({
       receivings: [...state.receivings, bd],
       pos: updatedPos,
       materials: updatedMaterials
+    };
+  }),
+
+  // Delivery Order methods
+  createDeliveryOrder: (deliveryOrder) => set((state) => ({
+    deliveryOrders: [...state.deliveryOrders, deliveryOrder]
+  })),
+
+  updateDeliveryOrder: (deliveryOrder) => set((state) => ({
+    deliveryOrders: state.deliveryOrders.map(doItem => doItem.id === deliveryOrder.id ? deliveryOrder : doItem)
+  })),
+
+  deleteDeliveryOrder: (id) => set((state) => ({
+    deliveryOrders: state.deliveryOrders.filter(doItem => doItem.id !== id)
+  })),
+
+  validateDeliveryOrder: (id) => set((state) => {
+    // Find the delivery order to validate
+    const doToValidate = state.deliveryOrders.find(doItem => doItem.id === id);
+    if (!doToValidate) return state;
+
+    // Update the status of the delivery order to VALIDATED
+    const updatedDeliveryOrders = state.deliveryOrders.map(doItem =>
+      doItem.id === id ? { ...doItem, status: 'VALIDATED' } : doItem
+    );
+
+    // Update the shipped quantities for each item in the delivery order
+    const updatedItems = [...state.items];
+    doToValidate.items.forEach(item => {
+      const itemIndex = updatedItems.findIndex(i => i.id === item.itemId);
+      if (itemIndex !== -1) {
+        const currentItem = updatedItems[itemIndex];
+        updatedItems[itemIndex] = {
+          ...currentItem,
+          shippedQty: (currentItem.shippedQty || 0) + item.qty
+        };
+      }
+    });
+
+    return {
+      deliveryOrders: updatedDeliveryOrders,
+      items: updatedItems
     };
   }),
 }));

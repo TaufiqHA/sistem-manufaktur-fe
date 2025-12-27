@@ -15,6 +15,7 @@ import { Users } from './pages/Users';
 import { Reports } from './pages/Reports';
 import { Procurement } from './pages/Procurement';
 import { Warehouse } from './pages/Warehouse';
+import { DeliveryOrders } from './pages/DeliveryOrders';
 
 const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {
   const currentUser = useStore(state => state.currentUser);
@@ -43,6 +44,7 @@ function App() {
           <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
           <Route path="/procurement" element={<ProtectedRoute><Procurement /></ProtectedRoute>} />
           <Route path="/warehouse" element={<ProtectedRoute><Warehouse /></ProtectedRoute>} />
+          <Route path="/delivery-orders" element={<ProtectedRoute><DeliveryOrders /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
