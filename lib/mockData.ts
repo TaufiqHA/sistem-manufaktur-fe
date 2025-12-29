@@ -25,21 +25,72 @@ export const MOCK_MACHINES: Machine[] = [
 ];
 
 export const MOCK_PROJECTS: Project[] = [
-  { 
-    id: 'p1', code: 'PRJ-001', name: 'Gondola SuperMart', customer: 'SuperMart', startDate: '2024-01-01', deadline: '2024-02-01', status: 'IN_PROGRESS', progress: 10, qtyPerUnit: 1, procurementQty: 100, totalQty: 100, unit: 'Set', isLocked: true
+  {
+    id: '1', code: 'PRJ-001', name: 'Gondola SuperMart', customer: 'SuperMart', startDate: '2024-01-01', deadline: '2024-02-01', status: 'IN_PROGRESS', progress: 10, qtyPerUnit: 1, procurementQty: 100, totalQty: 100, unit: 'Set', isLocked: true
+  },
+  {
+    id: '2', code: 'PRJ-002', name: 'Shelving Unit Carrefour', customer: 'Carrefour', startDate: '2024-01-15', deadline: '2024-03-15', status: 'PLANNED', progress: 0, qtyPerUnit: 1, procurementQty: 150, totalQty: 150, unit: 'Set', isLocked: false
+  },
+  {
+    id: '3', code: 'PRJ-003', name: 'Metal Racks Indomart', customer: 'Indomart', startDate: '2024-02-01', deadline: '2024-04-01', status: 'PLANNED', progress: 0, qtyPerUnit: 2, procurementQty: 200, totalQty: 200, unit: 'Set', isLocked: false
+  },
+  {
+    id: '4', code: 'PRJ-004', name: 'Custom Display Alfamart', customer: 'Alfamart', startDate: '2024-02-10', deadline: '2024-05-10', status: 'COMPLETED', progress: 100, qtyPerUnit: 1, procurementQty: 75, totalQty: 75, unit: 'Set', isLocked: true
+  },
+  {
+    id: '5', code: 'PRJ-005', name: 'Heavy Duty Storage Rack', customer: 'PT. Logistik Indonesia', startDate: '2024-03-01', deadline: '2024-06-01', status: 'ON_HOLD', progress: 35, qtyPerUnit: 3, procurementQty: 120, totalQty: 120, unit: 'Set', isLocked: true
   }
 ];
 
 // Fix: Added missing 'realized' property to BomItem objects to satisfy type definition
 export const MOCK_ITEMS: ProjectItem[] = [
   {
-    id: 'i1', projectId: 'p1', name: 'Tiang Gondola 2m', dimensions: '2000x50x50', thickness: '2mm', qtySet: 1, quantity: 100, unit: 'Pcs', isBomLocked: true, isWorkflowLocked: true,
+    id: '1', projectId: '1', name: 'Tiang Gondola 2m', dimensions: '2000x50x50', thickness: '2mm', qtySet: 1, quantity: 100, unit: 'Pcs', isBomLocked: true, isWorkflowLocked: true,
     workflow: [], // Added empty workflow to satisfy type definition
     warehouseQty: 50, // New: Quantity in warehouse
     shippedQty: 20,   // New: Quantity shipped
     bom: [
-      { id: 'b1', itemId: 'i1', materialId: 'm1', quantityPerUnit: 0.1, totalRequired: 10, allocated: 0, realized: 0 },
-      { id: 'b2', itemId: 'i1', materialId: 'm3', quantityPerUnit: 0.5, totalRequired: 50, allocated: 0, realized: 0 },
+      { id: '1', itemId: '1', materialId: 'm1', quantityPerUnit: 0.1, totalRequired: 10, allocated: 0, realized: 0 },
+      { id: '2', itemId: '1', materialId: 'm3', quantityPerUnit: 0.5, totalRequired: 50, allocated: 0, realized: 0 },
+    ]
+  },
+  {
+    id: '2', projectId: '2', name: 'Shelving Frame 3m', dimensions: '3000x80x40', thickness: '3mm', qtySet: 1, quantity: 150, unit: 'Pcs', isBomLocked: false, isWorkflowLocked: false,
+    workflow: [],
+    warehouseQty: 0,
+    shippedQty: 0,
+    bom: [
+      { id: '3', itemId: '2', materialId: 'm1', quantityPerUnit: 0.15, totalRequired: 22.5, allocated: 0, realized: 0 },
+      { id: '4', itemId: '2', materialId: 'm4', quantityPerUnit: 2, totalRequired: 300, allocated: 0, realized: 0 },
+    ]
+  },
+  {
+    id: '3', projectId: '3', name: 'Heavy Duty Beam', dimensions: '2500x100x50', thickness: '4mm', qtySet: 2, quantity: 400, unit: 'Pcs', isBomLocked: false, isWorkflowLocked: false,
+    workflow: [],
+    warehouseQty: 0,
+    shippedQty: 0,
+    bom: [
+      { id: '5', itemId: '3', materialId: 'm1', quantityPerUnit: 0.2, totalRequired: 80, allocated: 0, realized: 0 },
+    ]
+  },
+  {
+    id: '4', projectId: '4', name: 'Display Case Frame', dimensions: '1500x60x30', thickness: '2mm', qtySet: 1, quantity: 75, unit: 'Pcs', isBomLocked: true, isWorkflowLocked: true,
+    workflow: [],
+    warehouseQty: 75,
+    shippedQty: 75,
+    bom: [
+      { id: '6', itemId: '4', materialId: 'm1', quantityPerUnit: 0.08, totalRequired: 6, allocated: 6, realized: 6 },
+      { id: '7', itemId: '4', materialId: 'm3', quantityPerUnit: 0.3, totalRequired: 22.5, allocated: 22.5, realized: 22.5 },
+    ]
+  },
+  {
+    id: '5', projectId: '5', name: 'Storage Rack Base', dimensions: '2000x150x100', thickness: '5mm', qtySet: 3, quantity: 360, unit: 'Pcs', isBomLocked: true, isWorkflowLocked: true,
+    workflow: [],
+    warehouseQty: 126,
+    shippedQty: 0,
+    bom: [
+      { id: '8', itemId: '5', materialId: 'm1', quantityPerUnit: 0.25, totalRequired: 90, allocated: 31.5, realized: 31.5 },
+      { id: '9', itemId: '5', materialId: 'm4', quantityPerUnit: 4, totalRequired: 1440, allocated: 504, realized: 504 },
     ]
   }
 ];

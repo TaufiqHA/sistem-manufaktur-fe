@@ -53,6 +53,9 @@ export const ALL_STEPS: ProcessStep[] = [
   "PACKING",
 ];
 
+export const RAW_STEPS: ProcessStep[] = ALL_STEPS;
+export const ASSEMBLY_STEPS: ProcessStep[] = ALL_STEPS;
+
 export interface ItemStepConfig {
   step: ProcessStep;
   sequence: number;
@@ -67,6 +70,21 @@ export interface BomItem {
   totalRequired: number;
   allocated: number;
   realized: number; // New: Actual consumed material
+}
+
+export interface SubAssembly {
+  id: string;
+  itemId: string;
+  name: string;
+  qtyPerParent: number;
+  materialId: string;
+  processes: ProcessStep[];
+  totalNeeded: number;
+  completedQty: number;
+  totalProduced: number;
+  consumedQty: number;
+  stepStats: Record<ProcessStep, { produced: number; available: number }>;
+  isLocked: boolean;
 }
 
 export interface ProjectItem {
@@ -84,6 +102,9 @@ export interface ProjectItem {
   workflow: ItemStepConfig[];
   warehouseQty?: number; // New: Quantity in warehouse
   shippedQty?: number;   // New: Quantity shipped
+  flowType?: 'OLD' | 'NEW';
+  subAssemblies?: SubAssembly[];
+  assemblyStats?: Record<ProcessStep, { produced: number; available: number }>;
 }
 
 export type MachineStatus =

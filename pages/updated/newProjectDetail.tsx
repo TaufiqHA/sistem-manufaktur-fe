@@ -1,364 +1,62 @@
-import React, { useState, useMemo, useEffect } from 'react';
+
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-import {
+import { 
   Plus, Trash2, X, Box, Layers, Settings2, Component, ArrowRight, Info, Lock, Save, Trash, AlertCircle, TrendingUp, CheckCircle2, ChevronLeft, Target, Clock, Hammer, Calendar, ClipboardList
 } from 'lucide-react';
-import { RAW_STEPS, ASSEMBLY_STEPS, ALL_STEPS, ProcessStep, ItemStepConfig, Project, ProjectItem } from '../types';
-import { apiClient } from '../lib/api';
+import { RAW_STEPS, ASSEMBLY_STEPS, ProcessStep, ItemStepConfig } from '../types';
 
 export const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { machines, materials, tasks, logs, addProjectItem, deleteProjectItem, validateWorkflow, addSubAssembly, deleteSubAssembly, lockSubAssembly } = useStore();
-
-  // Ensure these are always available as fallback
-  const steps = RAW_STEPS || ALL_STEPS || [];
-  const assemblySteps = ASSEMBLY_STEPS || ALL_STEPS || [];
-
-  // API data state
-  const [project, setProject] = useState<Project | null>(null);
-  const [projectItems, setProjectItems] = useState<ProjectItem[]>([]);
-  const [projectTasks, setProjectTasks] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // UI state
+  const { projects, items, machines, materials, tasks, logs, addProjectItem, deleteProjectItem, validateWorkflow, addSubAssembly, deleteSubAssembly, lockSubAssembly } = useStore();
+  
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isSubModalOpen, setIsSubModalOpen] = useState<string | null>(null);
   const [isFlowModalOpen, setIsFlowModalOpen] = useState<string | null>(null);
   const [logDetailSa, setLogDetailSa] = useState<{id: string, name: string} | null>(null);
-  const [saProductionLogs, setSaProductionLogs] = useState<any[]>([]);
 
-  const [newItem, setNewItem] = useState({ name: '', dimensions: '', thickness: '', qtySet: 1, qtyPerProduct: 1, unit: 'PCS', flowType: 'NEW' as 'OLD' | 'NEW' });
+  const [newItem, setNewItem] = useState({ name: '', dimensions: '', thickness: '', qtySet: 1, unit: 'PCS', flowType: 'NEW' as 'OLD' | 'NEW' });
   const [newSub, setNewSub] = useState({ name: '', qtyPerParent: 1, materialId: '', processes: [] as ProcessStep[] });
   const [workflowConfig, setWorkflowConfig] = useState<ItemStepConfig[]>([]);
 
-  // Fetch project data from API
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!id) {
-        setError('Project ID tidak valid');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Fetch project detail
-        const projectRes = await apiClient.getProject(id);
-        if (!projectRes.success || !projectRes.data) {
-          setError('Project tidak ditemukan');
-          setProject(null);
-          setProjectItems([]);
-          setLoading(false);
-          return;
-        }
-
-        const projectData = projectRes.data as any;
-        // Transform API response to Project type
-        const transformedProject: Project = {
-          id: String(projectData.id),
-          code: projectData.code,
-          name: projectData.name,
-          customer: projectData.customer,
-          startDate: projectData.start_date,
-          deadline: projectData.deadline,
-          status: projectData.status,
-          progress: projectData.progress,
-          qtyPerUnit: projectData.qty_per_unit,
-          procurementQty: projectData.procurement_qty,
-          totalQty: projectData.total_qty,
-          unit: projectData.unit,
-          isLocked: projectData.is_locked,
-        };
-        setProject(transformedProject);
-
-        // Fetch tasks and production logs for this project
-        const tasksRes = await apiClient.getTasks(1, 1000, { project_id: id });
-        const logsRes = await apiClient.getProductionLogsByProject(id, 1, 1000, { type: 'OUTPUT' });
-
-        const projectTasksMap: Record<string, any[]> = {};
-        let tasksList: any[] = [];
-        if (tasksRes.success && tasksRes.data) {
-          tasksList = (tasksRes.data as any).data || [];
-          tasksList.forEach((task: any) => {
-            const itemId = String(task.item_id);
-            if (!projectTasksMap[itemId]) {
-              projectTasksMap[itemId] = [];
-            }
-            projectTasksMap[itemId].push(task);
-          });
-        }
-        setProjectTasks(tasksList);
-
-        // Process production logs for sub-assembly stepStats
-        const productionLogsBySubAssembly: Record<string, Record<string, { produced: number; available: number }>> = {};
-        if (logsRes.success && logsRes.data) {
-          const logsList = (logsRes.data as any).data || [];
-          logsList.forEach((log: any) => {
-            const saKey = String(log.item_id); // Assuming item_id refers to sub-assembly
-            const step = log.step;
-
-            if (!productionLogsBySubAssembly[saKey]) {
-              productionLogsBySubAssembly[saKey] = {};
-            }
-
-            if (!productionLogsBySubAssembly[saKey][step]) {
-              productionLogsBySubAssembly[saKey][step] = { produced: 0, available: 0 };
-            }
-
-            productionLogsBySubAssembly[saKey][step].produced += log.good_qty || 0;
-          });
-        }
-
-        // Fetch project items
-        const itemsRes = await apiClient.getProjectItemsByProjectId(id);
-        if (itemsRes.success && itemsRes.data) {
-          const transformedItems: ProjectItem[] = (itemsRes.data as any).map((item: any) => {
-            // Initialize assemblyStats based on fetched tasks
-            const assemblyStats: Record<any, { produced: number; available: number }> = {};
-            const itemTasks = projectTasksMap[String(item.id)] || [];
-
-            assemblySteps.forEach(step => {
-              const taskForStep = itemTasks.find((t: any) => t.step === step);
-              assemblyStats[step] = {
-                produced: taskForStep?.completed_qty || 0,
-                available: (taskForStep?.target_qty - taskForStep?.completed_qty) || 0
-              };
-            });
-
-            return {
-              id: String(item.id),
-              projectId: String(item.project_id),
-              name: item.name,
-              dimensions: item.dimensions,
-              thickness: item.thickness,
-              qtySet: item.qty_set,
-              quantity: item.quantity,
-              unit: item.unit,
-              isBomLocked: item.is_bom_locked || false,
-              isWorkflowLocked: item.is_workflow_locked || false,
-              bom: [],
-              workflow: item.workflow || [],
-              warehouseQty: 0,
-              shippedQty: 0,
-              flowType: 'NEW' as const,
-              subAssemblies: [],
-              assemblyStats,
-            } as ProjectItem;
-          });
-          setProjectItems(transformedItems);
-
-          // Fetch sub-assemblies for all items
-          for (const item of transformedItems) {
-            try {
-              const subAsRes = await apiClient.getSubAssembliesByProjectItem(item.id);
-              if (subAsRes.success && subAsRes.data) {
-                const subAssemblies = (subAsRes.data as any).map((sa: any) => {
-                  // Merge API stepStats with production log data
-                  const apiStepStats = sa.step_stats || {};
-                  const logStepStats = productionLogsBySubAssembly[String(sa.id)] || {};
-
-                  // Combine both sources: production logs take precedence
-                  const mergedStepStats: Record<string, { produced: number; available: number }> = {};
-                  const allSteps = new Set([...Object.keys(apiStepStats), ...Object.keys(logStepStats)]);
-
-                  allSteps.forEach(step => {
-                    mergedStepStats[step] = logStepStats[step] || apiStepStats[step] || { produced: 0, available: 0 };
-                  });
-
-                  return {
-                    id: String(sa.id),
-                    itemId: String(sa.item_id),
-                    name: sa.name,
-                    qtyPerParent: sa.qty_per_parent,
-                    materialId: String(sa.material_id),
-                    processes: Array.isArray(sa.processes) ? sa.processes : Object.values(sa.processes),
-                    totalNeeded: sa.total_needed,
-                    completedQty: sa.completed_qty,
-                    totalProduced: sa.total_produced,
-                    consumedQty: sa.consumed_qty,
-                    stepStats: mergedStepStats,
-                    isLocked: sa.is_locked,
-                  };
-                });
-
-                setProjectItems(prev => prev.map(i => i.id === item.id ? {...i, subAssemblies} : i));
-              }
-            } catch (err) {
-              console.error(`Error fetching sub-assemblies for item ${item.id}:`, err);
-            }
-          }
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Terjadi kesalahan saat mengambil data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [id]);
+  const project = projects.find(p => p.id === id);
+  const projectItems = items.filter(i => i.projectId === id);
 
   const stats = useMemo(() => {
     const totalTarget = project?.totalQty || 0;
-    const completed = projectTasks.filter(t => t.step === 'PACKING').reduce((acc, t) => acc + t.completed_qty, 0);
+    const completed = tasks.filter(t => t.projectId === id && t.step === 'PACKING').reduce((acc, t) => acc + t.completedQty, 0);
     const progress = totalTarget > 0 ? (completed / totalTarget) * 100 : 0;
     return { totalTarget, completed, progress };
-  }, [id, projectTasks, project]);
+  }, [id, tasks, project]);
 
-  // Show loading state
-  if (loading) {
-    return <div className="p-10 text-center font-bold text-slate-400 font-sans">Memuat data project...</div>;
-  }
+  if (!project) return <div className="p-10 text-center font-bold text-slate-400 font-sans">Project Tidak Ditemukan</div>;
 
-  // Show error state
-  if (error || !project) {
-    return <div className="p-10 text-center font-bold text-slate-400 font-sans">Project Tidak Ditemukan</div>;
-  }
-
-  const handleAddItem = async (e: React.FormEvent) => {
+  const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!newItem.name || !newItem.dimensions || !newItem.thickness) {
-      alert('Lengkapi semua field: Nama Item, Dimensi, dan Ketebalan');
-      return;
-    }
-
-    if (newItem.qtySet < 1) {
-      alert('Qty/Set harus minimal 1');
-      return;
-    }
-
-    try {
-      if (!project) {
-        alert('Project tidak ditemukan');
-        return;
-      }
-
-      const quantity = project.totalQty * newItem.qtySet;
-      const totalRequiredQty = newItem.qtyPerProduct * quantity;
-
-      const res = await apiClient.createProjectItem({
-        project_id: project.id,
-        name: newItem.name,
-        dimensions: newItem.dimensions,
-        thickness: newItem.thickness,
-        qty_set: newItem.qtySet,
-        qty_per_product: newItem.qtyPerProduct,
-        total_required_qty: totalRequiredQty,
-        quantity: quantity,
-        unit: newItem.unit || 'PCS',
-        is_bom_locked: false,
-        is_workflow_locked: false,
-        workflow: [],
-        bom: [],
-      });
-
-      if (res.success && res.data) {
-        // Initialize assemblyStats for all steps
-        const assemblyStats: Record<any, { produced: number; available: number }> = {};
-        assemblySteps.forEach(step => {
-          assemblyStats[step] = { produced: 0, available: 0 };
-        });
-
-        const newProjectItem: ProjectItem = {
-          id: String(res.data.id),
-          projectId: String(res.data.project_id),
-          name: res.data.name,
-          dimensions: res.data.dimensions,
-          thickness: res.data.thickness,
-          qtySet: res.data.qty_set,
-          quantity: res.data.quantity,
-          unit: res.data.unit,
-          isBomLocked: res.data.is_bom_locked || false,
-          isWorkflowLocked: res.data.is_workflow_locked || false,
-          bom: [],
-          workflow: res.data.workflow || [],
-          warehouseQty: 0,
-          shippedQty: 0,
-          flowType: newItem.flowType,
-          subAssemblies: [],
-          assemblyStats,
-        };
-
-        setProjectItems(prev => [...prev, newProjectItem]);
-        setNewItem({ name: '', dimensions: '', thickness: '', qtySet: 1, qtyPerProduct: 1, unit: 'PCS', flowType: 'NEW' });
-        setIsItemModalOpen(false);
-      } else {
-        alert(`Gagal menambahkan item: ${res.message || 'Kesalahan server'}`);
-      }
-    } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : 'Terjadi kesalahan'}`);
-    }
+    addProjectItem({
+      ...newItem, id: `item-${Date.now()}`, projectId: project.id, quantity: project.totalQty * newItem.qtySet, 
+      isBomLocked: false, isWorkflowLocked: false, bom: [], workflow: [], subAssemblies: [], warehouseQty: 0, shippedQty: 0, assemblyStats: {}
+    } as any);
+    setIsItemModalOpen(false);
   };
 
-  const handleAddSub = async (itemId: string) => {
+  const handleAddSub = (itemId: string) => {
     if (!newSub.name || !newSub.materialId || newSub.processes.length === 0) {
        alert("Lengkapi Nama, Material, dan Tahapan Proses!");
        return;
     }
-
-    try {
-      const item = projectItems.find(i => i.id === itemId);
-      const totalNeeded = (item?.quantity || 0) * newSub.qtyPerParent;
-
-      // Transform processes array to match API format if needed
-      const processesObj: Record<string, string> = {};
-      newSub.processes.forEach((process, index) => {
-        processesObj[`process_${index + 1}`] = process;
-      });
-
-      const res = await apiClient.createSubAssembly({
-        item_id: itemId,
-        name: newSub.name,
-        qty_per_parent: newSub.qtyPerParent,
-        material_id: newSub.materialId,
-        processes: newSub.processes,
-        total_needed: totalNeeded,
-        completed_qty: 0,
-        total_produced: 0,
-        consumed_qty: 0,
-        step_stats: {},
-        is_locked: false,
-      });
-
-      if (res.success && res.data) {
-        // Add to local state
-        const newSubAssembly = {
-          id: String(res.data.id),
-          itemId: String(res.data.item_id),
-          name: res.data.name,
-          qtyPerParent: res.data.qty_per_parent,
-          materialId: String(res.data.material_id),
-          processes: Array.isArray(res.data.processes) ? res.data.processes : Object.values(res.data.processes),
-          totalNeeded: res.data.total_needed,
-          completedQty: res.data.completed_qty,
-          totalProduced: res.data.total_produced,
-          consumedQty: res.data.consumed_qty,
-          stepStats: res.data.step_stats || {},
-          isLocked: res.data.is_locked,
-        };
-
-        setProjectItems(prev => prev.map(i =>
-          i.id === itemId
-            ? {...i, subAssemblies: [...(i.subAssemblies || []), newSubAssembly]}
-            : i
-        ));
-        setNewSub({ name: '', qtyPerParent: 1, materialId: '', processes: [] });
-      } else {
-        alert(`Gagal menambahkan komponen: ${res.message || 'Kesalahan server'}`);
-      }
-    } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : 'Terjadi kesalahan'}`);
-    }
+    addSubAssembly(itemId, {
+      ...newSub, id: `sa-${Date.now()}`, 
+      totalNeeded: (items.find(i=>i.id===itemId)?.quantity || 0) * newSub.qtyPerParent,
+      completedQty: 0, totalProduced: 0, consumedQty: 0, stepStats: {}, isLocked: false
+    });
+    setNewSub({ name: '', qtyPerParent: 1, materialId: '', processes: [] });
   };
 
   const startFlowConfig = (item: any) => {
-    const initialFlow: ItemStepConfig[] = assemblySteps.map((step, idx) => ({
+    const initialFlow: ItemStepConfig[] = ASSEMBLY_STEPS.map((step, idx) => ({
       step, sequence: idx + 1, allocations: [{ id: `alloc-${idx}`, machineId: '', targetQty: item.quantity }]
     }));
     setWorkflowConfig(item.workflow.length > 0 ? [...item.workflow] : initialFlow);
@@ -413,9 +111,9 @@ export const ProjectDetail: React.FC = () => {
 
       <div className="grid grid-cols-1 gap-12">
         {projectItems.map((item, idx) => {
-          const itemTasks = projectTasks.filter(t => t.item_id === String(item.id));
+          const itemTasks = tasks.filter(t => t.itemId === item.id);
           const packingTask = itemTasks.find(t => t.step === 'PACKING');
-          const finishedQty = packingTask?.completed_qty || 0;
+          const finishedQty = packingTask?.completedQty || 0;
           const globalItemPerc = item.quantity > 0 ? Math.round((finishedQty / item.quantity) * 100) : 0;
 
           return (
@@ -457,20 +155,20 @@ export const ProjectDetail: React.FC = () => {
                            <th className="px-8 py-5">Komponen</th>
                            <th className="px-8 py-5 text-center">Qty/Unit</th>
                            <th className="px-8 py-5 text-center">Total Perlu</th>
-                           {steps.map(s => <th key={s} className="px-8 py-5 text-center">{s} <br/><span className="text-[8px] opacity-60">(Hasil / Sedia)</span></th>)}
+                           {RAW_STEPS.map(s => <th key={s} className="px-8 py-5 text-center">{s} <br/><span className="text-[8px] opacity-60">(Hasil / Sedia)</span></th>)}
                            <th className="px-8 py-5 text-center bg-emerald-50/50">Stok Jadi <br/><span className="text-[8px] opacity-60">(Siap Las)</span></th>
                            <th className="px-8 py-5 text-right">Aksi</th>
                          </tr>
                        </thead>
                        <tbody className="divide-y font-bold">
-                         {(item.subAssemblies || []).map(sa => (
+                         {item.subAssemblies.map(sa => (
                            <tr key={sa.id} className="hover:bg-slate-50/50 transition-colors">
                              <td className="px-8 py-6 uppercase font-black text-slate-900">{sa.name}</td>
                              <td className="px-8 py-6 text-center text-slate-400">{sa.qtyPerParent}</td>
                              <td className="px-8 py-6 text-center text-slate-900 font-black">{sa.totalNeeded}</td>
-                             {steps.map((s) => {
+                             {RAW_STEPS.map((s) => {
                                const isIncluded = sa.processes.includes(s);
-                               const stats = (sa.stepStats && sa.stepStats[s]) || { produced: 0, available: 0 };
+                               const stats = sa.stepStats[s] || { produced: 0, available: 0 };
                                const perc = sa.totalNeeded > 0 ? Math.round((stats.produced / sa.totalNeeded) * 100) : 0;
                                return (
                                  <td key={s} className="px-8 py-6 text-center">
@@ -485,19 +183,7 @@ export const ProjectDetail: React.FC = () => {
                              })}
                              <td className="px-8 py-6 text-center text-emerald-600 font-black text-lg bg-emerald-50/20">{sa.completedQty}</td>
                              <td className="px-8 py-6 text-right">
-                                <button onClick={async () => {
-                                  try {
-                                    const logsRes = await apiClient.getProductionLogs(1, 1000, { item_id: sa.id });
-                                    if (logsRes.success && logsRes.data) {
-                                      const logsList = (logsRes.data as any).data || [];
-                                      setSaProductionLogs(logsList);
-                                    }
-                                    setLogDetailSa({id: sa.id, name: sa.name});
-                                  } catch (err) {
-                                    console.error('Error fetching logs:', err);
-                                    setLogDetailSa({id: sa.id, name: sa.name});
-                                  }
-                                }} className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all">
+                                <button onClick={() => setLogDetailSa({id: sa.id, name: sa.name})} className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all">
                                    <ClipboardList size={18}/>
                                 </button>
                              </td>
@@ -518,7 +204,7 @@ export const ProjectDetail: React.FC = () => {
                        <tr>
                          <th className="px-8 py-5">Nama Item</th>
                          <th className="px-8 py-5 text-center">Total Target</th>
-                         {assemblySteps.map(s => <th key={s} className="px-8 py-5 text-center">{s} <br/><span className="text-[8px] opacity-60">(Hasil / Sedia)</span></th>)}
+                         {ASSEMBLY_STEPS.map(s => <th key={s} className="px-8 py-5 text-center">{s} <br/><span className="text-[8px] opacity-60">(Hasil / Sedia)</span></th>)}
                          <th className="px-8 py-5 text-right">Log</th>
                        </tr>
                      </thead>
@@ -526,7 +212,7 @@ export const ProjectDetail: React.FC = () => {
                         <tr className="hover:bg-slate-50 transition-colors">
                            <td className="px-8 py-6 uppercase font-black text-slate-900">{item.name}</td>
                            <td className="px-8 py-6 text-center text-slate-900">{item.quantity}</td>
-                           {assemblySteps.map(s => {
+                           {ASSEMBLY_STEPS.map(s => {
                               const stats = item.assemblyStats?.[s] || { produced: 0, available: 0 };
                               const perc = item.quantity > 0 ? Math.round((stats.produced / item.quantity) * 100) : 0;
                               return (
@@ -539,19 +225,7 @@ export const ProjectDetail: React.FC = () => {
                               );
                            })}
                            <td className="px-8 py-6 text-right">
-                              <button onClick={async () => {
-                                try {
-                                  const logsRes = await apiClient.getProductionLogs(1, 1000, { item_id: item.id });
-                                  if (logsRes.success && logsRes.data) {
-                                    const logsList = (logsRes.data as any).data || [];
-                                    setSaProductionLogs(logsList);
-                                  }
-                                  setLogDetailSa({id: item.id, name: item.name});
-                                } catch (err) {
-                                  console.error('Error fetching logs:', err);
-                                  setLogDetailSa({id: item.id, name: item.name});
-                                }
-                              }} className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all">
+                              <button onClick={() => setLogDetailSa({id: item.id, name: item.name})} className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all">
                                  <ClipboardList size={18}/>
                               </button>
                            </td>
@@ -561,11 +235,9 @@ export const ProjectDetail: React.FC = () => {
                  </div>
 
                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {assemblySteps.map(step => {
+                    {ASSEMBLY_STEPS.map(step => {
                        const task = itemTasks.find(t => t.step === step);
-                       const completedQty = task?.completed_qty || 0;
-                       const targetQty = task?.target_qty || item.quantity;
-                       const perc = targetQty > 0 ? Math.round((completedQty / targetQty) * 100) : 0;
+                       const perc = task ? Math.round((task.completedQty / task.targetQty) * 100) : 0;
                        return (
                           <div key={step} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-4">
                              <div className="flex justify-between items-center">
@@ -576,8 +248,8 @@ export const ProjectDetail: React.FC = () => {
                                 <div className={`h-full transition-all duration-700 ${perc === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${perc}%`}} />
                              </div>
                              <div className="flex justify-between items-end">
-                                <div><p className="text-[8px] font-black text-slate-400 uppercase">Input</p><p className="text-xl font-black text-slate-900">{completedQty}</p></div>
-                                <div className="text-right"><p className="text-[8px] font-black text-slate-400 uppercase">Target</p><p className="text-sm font-black text-slate-500">{targetQty}</p></div>
+                                <div><p className="text-[8px] font-black text-slate-400 uppercase">Input</p><p className="text-xl font-black text-slate-900">{task?.completedQty || 0}</p></div>
+                                <div className="text-right"><p className="text-[8px] font-black text-slate-400 uppercase">Target</p><p className="text-sm font-black text-slate-500">{item.quantity}</p></div>
                              </div>
                           </div>
                        );
@@ -601,8 +273,8 @@ export const ProjectDetail: React.FC = () => {
                  <button onClick={() => setLogDetailSa(null)} className="p-4 text-slate-400 hover:bg-slate-200 rounded-full transition-all"><X size={32}/></button>
               </div>
               <div className="p-12 overflow-y-auto custom-scrollbar space-y-4">
-                 {logs.filter(l => l.itemId === logDetailSa.id).length > 0 ? (
-                   logs.filter(l => l.itemId === logDetailSa.id).map(log => (
+                 {logs.filter(l => l.subAssemblyId === logDetailSa.id || l.itemId === logDetailSa.id).length > 0 ? (
+                   logs.filter(l => l.subAssemblyId === logDetailSa.id || l.itemId === logDetailSa.id).map(log => (
                      <div key={log.id} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 flex justify-between items-center">
                         <div className="flex gap-6 items-center">
                            <div className="w-14 h-14 bg-white rounded-3xl flex items-center justify-center text-blue-600 shadow-sm border border-slate-100"><Clock size={28}/></div>
@@ -653,10 +325,10 @@ export const ProjectDetail: React.FC = () => {
                     <div className="space-y-4 md:col-span-4">
                        <label className="text-[10px] font-black text-slate-400 uppercase ml-4">ALUR PROSES RAKITAN</label>
                        <div className="flex flex-wrap gap-4 p-6 bg-white rounded-[32px] border border-slate-200">
-                          {steps.map((s, idx) => {
+                          {RAW_STEPS.map((s, idx) => {
                             const isAdded = newSub.processes.includes(s);
                             return (
-                              <button key={s} onClick={() => setNewSub(p => ({...p, processes: isAdded ? p.processes.filter(x => x !== s) : [...p.processes, s]}))} className={`px-8 py-4 rounded-[20px] border-2 font-black text-xs uppercase transition-all flex items-center gap-3 ${isAdded ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-200 text-slate-400 hover:border-blue-300 hover:text-blue-600'}`}>
+                              <button key={s} onClick={() => setNewSub(p => ({...p, processes: isAdded ? p.processes.filter(x => x !== s) : [...p.processes, s]}))} className={`px-8 py-4 rounded-[20px] border-2 font-black text-xs uppercase transition-all flex items-center gap-3 ${isAdded ? 'bg-blue-600 border-blue-600 text-white shadow-xl' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-blue-300'}`}>
                                 <span className="opacity-50">{idx + 1}.</span> {s}
                               </button>
                             );
@@ -668,7 +340,7 @@ export const ProjectDetail: React.FC = () => {
                  <div className="space-y-6">
                     <h4 className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-2"><Hammer size={14}/> KOMPONEN TERDAFTAR</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                       {projectItems.find(i => i.id === isSubModalOpen)?.subAssemblies?.map(sa => (
+                       {items.find(i => i.id === isSubModalOpen)?.subAssemblies.map(sa => (
                          <div key={sa.id} className="bg-white border-2 border-slate-50 p-8 rounded-[40px] flex justify-between items-center shadow-sm hover:border-blue-200 transition-all">
                             <div className="space-y-2">
                                <p className="font-black text-slate-900 uppercase text-lg">{sa.name}</p>
@@ -678,39 +350,8 @@ export const ProjectDetail: React.FC = () => {
                                </div>
                             </div>
                             <div className="flex gap-2">
-                               {!sa.isLocked ? (<button onClick={async () => {
-                                 try {
-                                   const res = await apiClient.updateSubAssembly(sa.id, { is_locked: true });
-                                   if (res.success) {
-                                     setProjectItems(prev => prev.map(i =>
-                                       i.id === isSubModalOpen
-                                         ? {...i, subAssemblies: i.subAssemblies?.map(s => s.id === sa.id ? {...s, isLocked: true} : s)}
-                                         : i
-                                     ));
-                                   } else {
-                                     alert(`Gagal mengunci: ${res.message || 'Kesalahan server'}`);
-                                   }
-                                 } catch (err) {
-                                   alert(`Error: ${err instanceof Error ? err.message : 'Terjadi kesalahan'}`);
-                                 }
-                               }} className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl shadow-sm hover:bg-emerald-600 hover:text-white transition-all"><Lock size={20}/></button>) : (<div className="p-4 bg-emerald-600 text-white rounded-2xl shadow-lg"><Lock size={20}/></div>)}
-                               <button onClick={async () => {
-                                 if (!confirm('Apakah Anda yakin ingin menghapus komponen ini?')) return;
-                                 try {
-                                   const res = await apiClient.deleteSubAssembly(sa.id);
-                                   if (res.success) {
-                                     setProjectItems(prev => prev.map(i =>
-                                       i.id === isSubModalOpen
-                                         ? {...i, subAssemblies: i.subAssemblies?.filter(s => s.id !== sa.id)}
-                                         : i
-                                     ));
-                                   } else {
-                                     alert(`Gagal menghapus: ${res.message || 'Kesalahan server'}`);
-                                   }
-                                 } catch (err) {
-                                   alert(`Error: ${err instanceof Error ? err.message : 'Terjadi kesalahan'}`);
-                                 }
-                               }} className="p-4 bg-red-50 text-red-300 rounded-2xl hover:bg-red-500 hover:text-white transition-all"><Trash size={20}/></button>
+                               {!sa.isLocked ? (<button onClick={() => lockSubAssembly(isSubModalOpen!, sa.id)} className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl shadow-sm hover:bg-emerald-600 hover:text-white transition-all"><Lock size={20}/></button>) : (<div className="p-4 bg-emerald-600 text-white rounded-2xl shadow-lg"><Lock size={20}/></div>)}
+                               <button onClick={() => deleteSubAssembly(isSubModalOpen!, sa.id)} className="p-4 bg-red-50 text-red-300 rounded-2xl hover:bg-red-500 hover:text-white transition-all"><Trash size={20}/></button>
                             </div>
                          </div>
                        ))}
@@ -734,10 +375,8 @@ export const ProjectDetail: React.FC = () => {
                    <div key={idx} className="bg-white border-2 border-slate-50 p-8 rounded-[40px] flex flex-col sm:flex-row items-center justify-between gap-8 group hover:border-blue-200 transition-all">
                       <div className="flex items-center gap-8"><div className="w-16 h-16 bg-slate-900 text-white rounded-3xl flex items-center justify-center font-black text-xl shadow-xl group-hover:bg-blue-600 transition-all">{idx + 1}</div><div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PROSES UTAMA</p><p className="text-2xl font-black text-slate-900">{config.step}</p></div></div>
                       <div className="w-full sm:w-80">
-                         <select className="w-full p-5 bg-slate-50 border border-slate-100 rounded-[24px] font-black outline-none transition-all appearance-none" value={config.allocations?.[0]?.machineId || ''} onChange={(e) => {
+                         <select className="w-full p-5 bg-slate-50 border border-slate-100 rounded-[24px] font-black outline-none transition-all appearance-none" value={config.allocations[0].machineId} onChange={(e) => {
                             const newFlow = [...workflowConfig];
-                            if (!newFlow[idx].allocations) newFlow[idx].allocations = [];
-                            if (!newFlow[idx].allocations[0]) newFlow[idx].allocations[0] = { id: `alloc-${idx}`, machineId: '', targetQty: 0 };
                             newFlow[idx].allocations[0].machineId = e.target.value;
                             setWorkflowConfig(newFlow);
                          }}>
@@ -766,7 +405,7 @@ export const ProjectDetail: React.FC = () => {
               <form onSubmit={handleAddItem} className="p-12 space-y-8">
                  <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Gunakan Alur</label><div className="flex bg-slate-100 p-2 rounded-[24px]"><button type="button" onClick={() => setNewItem({...newItem, flowType: 'OLD'})} className={`flex-1 py-5 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${newItem.flowType === 'OLD' ? 'bg-white text-blue-600 shadow-xl' : 'text-slate-400'}`}>DIRECT (LAMA)</button><button type="button" onClick={() => setNewItem({...newItem, flowType: 'NEW'})} className={`flex-1 py-5 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all ${newItem.flowType === 'NEW' ? 'bg-white text-amber-600 shadow-xl' : 'text-slate-400'}`}>RAKITAN (BARU)</button></div></div>
                  <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Nama Item Jadi</label><input required className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[28px] font-black uppercase outline-none" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="TIANG GONDOLA DOUBLE" /></div>
-                 <div className="grid grid-cols-3 gap-6"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-4">Dimensi</label><input required className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[28px] font-black outline-none" value={newItem.dimensions} onChange={e => setNewItem({...newItem, dimensions: e.target.value})} placeholder="2000x50x50" /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-4">Ketebalan</label><input required className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[28px] font-black outline-none" value={newItem.thickness} onChange={e => setNewItem({...newItem, thickness: e.target.value})} placeholder="5mm" /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-4">Qty / Set</label><input type="number" required className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[28px] font-black outline-none" value={newItem.qtySet} onChange={e => setNewItem({...newItem, qtySet: Number(e.target.value)})} /></div></div>
+                 <div className="grid grid-cols-2 gap-6"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-4">Dimensi</label><input required className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[28px] font-black outline-none" value={newItem.dimensions} onChange={e => setNewItem({...newItem, dimensions: e.target.value})} placeholder="2000x50x50" /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-4">Qty / Set</label><input type="number" required className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[28px] font-black outline-none" value={newItem.qtySet} onChange={e => setNewItem({...newItem, qtySet: Number(e.target.value)})} /></div></div>
                  <button type="submit" className="w-full py-7 bg-blue-600 text-white rounded-[32px] font-black uppercase text-sm tracking-[0.3em] shadow-2xl hover:bg-blue-700 transition-all active:scale-95">SIMPAN ITEM KERJA</button>
               </form>
            </div>

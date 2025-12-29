@@ -1005,6 +1005,87 @@ interface DeliveryOrderItemUpdateRequest {
   unit?: string;
 }
 
+// Sub Assemblies Data Types
+interface SubAssemblyData {
+  id?: number | string;
+  item_id: string | number;
+  name: string;
+  qty_per_parent: number;
+  material_id: number | string;
+  processes: Record<string, string> | string[];
+  total_needed: number;
+  completed_qty: number;
+  total_produced: number;
+  consumed_qty: number;
+  step_stats?: Record<string, { completed: boolean; progress: number }>;
+  is_locked: boolean;
+  created_at?: string;
+  updated_at?: string;
+  material?: {
+    id: number;
+    code: string;
+    name: string;
+    unit: string;
+    current_stock: number;
+    safety_stock: number;
+    price_per_unit: string | number;
+    category: string;
+  };
+}
+
+interface SubAssembliesListResponse {
+  data: SubAssemblyData[];
+  links?: {
+    first?: string;
+    last?: string;
+    prev?: string;
+    next?: string;
+  };
+  meta?: {
+    current_page: number;
+    from: number;
+    last_page: number;
+    path: string;
+    per_page: number;
+    to: number;
+    total: number;
+  };
+}
+
+interface SubAssemblyResponse {
+  data: SubAssemblyData;
+  success?: boolean;
+  message?: string;
+}
+
+interface SubAssemblyCreateRequest {
+  item_id: string | number;
+  name: string;
+  qty_per_parent: number;
+  material_id: number | string;
+  processes: Record<string, string> | string[];
+  total_needed: number;
+  completed_qty?: number;
+  total_produced?: number;
+  consumed_qty?: number;
+  step_stats?: Record<string, { completed: boolean; progress: number }>;
+  is_locked?: boolean;
+}
+
+interface SubAssemblyUpdateRequest {
+  item_id?: string | number;
+  name?: string;
+  qty_per_parent?: number;
+  material_id?: number | string;
+  processes?: Record<string, string> | string[];
+  total_needed?: number;
+  completed_qty?: number;
+  total_produced?: number;
+  consumed_qty?: number;
+  step_stats?: Record<string, { completed: boolean; progress: number }>;
+  is_locked?: boolean;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -2441,6 +2522,78 @@ class ApiClient {
     );
   }
 
+  // Sub Assemblies API Methods
+  async getSubAssemblies(
+    page: number = 1,
+    perPage: number = 10
+  ): Promise<ApiResponse<SubAssembliesListResponse>> {
+    const params = new URLSearchParams();
+    params.append("page", page.toString());
+    params.append("per_page", perPage.toString());
+    return this.request<SubAssembliesListResponse>(
+      `/sub-assemblies?${params.toString()}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getSubAssembly(
+    id: string | number
+  ): Promise<ApiResponse<SubAssemblyResponse>> {
+    return this.request<SubAssemblyResponse>(
+      `/sub-assemblies/${id}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async getSubAssembliesByProjectItem(
+    projectItemId: string | number
+  ): Promise<ApiResponse<SubAssembliesListResponse>> {
+    return this.request<SubAssembliesListResponse>(
+      `/sub-assemblies?item_id=${projectItemId}`,
+      "GET",
+      undefined,
+      true
+    );
+  }
+
+  async createSubAssembly(
+    data: SubAssemblyCreateRequest
+  ): Promise<ApiResponse<SubAssemblyResponse>> {
+    return this.request<SubAssemblyResponse>(
+      "/sub-assemblies",
+      "POST",
+      data,
+      true
+    );
+  }
+
+  async updateSubAssembly(
+    id: string | number,
+    data: SubAssemblyUpdateRequest
+  ): Promise<ApiResponse<SubAssemblyResponse>> {
+    return this.request<SubAssemblyResponse>(
+      `/sub-assemblies/${id}`,
+      "PUT",
+      data,
+      true
+    );
+  }
+
+  async deleteSubAssembly(
+    id: string | number
+  ): Promise<ApiResponse<DeleteResponse>> {
+    return this.request<DeleteResponse>(
+      `/sub-assemblies/${id}`,
+      "DELETE",
+      {},
+      true
+    );
+  }
+
   setToken(token: string): void {
     localStorage.setItem("auth_token", token);
   }
@@ -2545,4 +2698,9 @@ export type {
   DeliveryOrderItemResponse,
   DeliveryOrderItemCreateRequest,
   DeliveryOrderItemUpdateRequest,
+  SubAssemblyData,
+  SubAssembliesListResponse,
+  SubAssemblyResponse,
+  SubAssemblyCreateRequest,
+  SubAssemblyUpdateRequest,
 };
