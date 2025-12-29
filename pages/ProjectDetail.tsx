@@ -20,6 +20,8 @@ export const ProjectDetail: React.FC = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [projectItems, setProjectItems] = useState<ProjectItem[]>([]);
   const [projectTasks, setProjectTasks] = useState<any[]>([]);
+  const [apiMachines, setApiMachines] = useState<any[]>([]);
+  const [apiMaterials, setApiMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -193,6 +195,40 @@ export const ProjectDetail: React.FC = () => {
             }
           }
         }
+        // Fetch machines from API
+        try {
+          const machinesRes = await apiClient.getMachines();
+          if (machinesRes.success && machinesRes.data) {
+            // API returns { data: MachineData[] }
+            const machinesData = Array.isArray(machinesRes.data) ? machinesRes.data : (machinesRes.data as any).data || [];
+            console.log('Fetched machines from API:', machinesData);
+            setApiMachines(machinesData);
+          } else {
+            console.warn('Failed to fetch machines:', machinesRes.message);
+            setApiMachines([]);
+          }
+        } catch (err) {
+          console.error('Error fetching machines:', err);
+          setApiMachines([]);
+        }
+
+        // Fetch materials from API
+        try {
+          const materialsRes = await apiClient.getMaterials();
+          if (materialsRes.success && materialsRes.data) {
+            // API returns { data: MaterialData[] }
+            const materialsData = Array.isArray(materialsRes.data) ? materialsRes.data : (materialsRes.data as any).data || [];
+            console.log('Fetched materials from API:', materialsData);
+            setApiMaterials(materialsData);
+          } else {
+            console.warn('Failed to fetch materials:', materialsRes.message);
+            setApiMaterials([]);
+          }
+        } catch (err) {
+          console.error('Error fetching materials:', err);
+          setApiMaterials([]);
+        }
+
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Terjadi kesalahan saat mengambil data');
       } finally {
@@ -317,12 +353,12 @@ export const ProjectDetail: React.FC = () => {
         name: newSub.name,
         qty_per_parent: newSub.qtyPerParent,
         material_id: newSub.materialId,
-        processes: newSub.processes,
+        processes: JSON.stringify(newSub.processes),
         total_needed: totalNeeded,
         completed_qty: 0,
         total_produced: 0,
         consumed_qty: 0,
-        step_stats: {},
+        step_stats: JSON.stringify({}),
         is_locked: false,
       });
 
@@ -358,10 +394,18 @@ export const ProjectDetail: React.FC = () => {
   };
 
   const startFlowConfig = (item: any) => {
-    const initialFlow: ItemStepConfig[] = assemblySteps.map((step, idx) => ({
+    // Create default workflow from standard assembly steps
+    const initialFlow: ItemStepConfig[] = ASSEMBLY_STEPS.map((step, idx) => ({
       step, sequence: idx + 1, allocations: [{ id: `alloc-${idx}`, machineId: '', targetQty: item.quantity }]
     }));
-    setWorkflowConfig(item.workflow.length > 0 ? [...item.workflow] : initialFlow);
+
+    // Use existing workflow from API if available, otherwise use default
+    if (item.workflow && Array.isArray(item.workflow) && item.workflow.length > 0) {
+      setWorkflowConfig([...item.workflow]);
+    } else {
+      setWorkflowConfig(initialFlow);
+    }
+
     setIsFlowModalOpen(item.id);
   };
 
@@ -437,7 +481,40 @@ export const ProjectDetail: React.FC = () => {
                 </div>
                 <div className="flex flex-wrap gap-4 w-full xl:w-auto">
                   {item.flowType === 'NEW' && (
-                    <button onClick={() => setIsSubModalOpen(item.id)} className="flex-1 bg-amber-500 text-white px-8 py-5 rounded-[24px] font-black text-xs uppercase shadow-xl flex items-center justify-center gap-3 transition-all active:scale-95">
+                    <button onClick={async () => {
+                      setNewSub({ name: '', qtyPerParent: 1, materialId: '', processes: [] });
+                      try {
+                        const subAsRes = await apiClient.getSubAssembliesByProjectItem(item.id);
+                        if (subAsRes.success && subAsRes.data) {
+                          const subAssemblies = (subAsRes.data as any).map((sa: any) => {
+                            const mergedStepStats: Record<string, { produced: number; available: number }> = {};
+                            const apiStepStats = sa.step_stats || {};
+                            const allSteps = new Set(Object.keys(apiStepStats));
+                            allSteps.forEach(step => {
+                              mergedStepStats[step] = apiStepStats[step] || { produced: 0, available: 0 };
+                            });
+                            return {
+                              id: String(sa.id),
+                              itemId: String(sa.item_id),
+                              name: sa.name,
+                              qtyPerParent: sa.qty_per_parent,
+                              materialId: String(sa.material_id),
+                              processes: Array.isArray(sa.processes) ? sa.processes : Object.values(sa.processes),
+                              totalNeeded: sa.total_needed,
+                              completedQty: sa.completed_qty,
+                              totalProduced: sa.total_produced,
+                              consumedQty: sa.consumed_qty,
+                              stepStats: mergedStepStats,
+                              isLocked: sa.is_locked,
+                            };
+                          });
+                          setProjectItems(prev => prev.map(i => i.id === item.id ? {...i, subAssemblies} : i));
+                        }
+                      } catch (err) {
+                        console.error(`Error fetching sub-assemblies for item ${item.id}:`, err);
+                      }
+                      setIsSubModalOpen(item.id);
+                    }} className="flex-1 bg-amber-500 text-white px-8 py-5 rounded-[24px] font-black text-xs uppercase shadow-xl flex items-center justify-center gap-3 transition-all active:scale-95">
                       <Component size={20}/> MASTER RAKITAN
                     </button>
                   )}
@@ -561,27 +638,34 @@ export const ProjectDetail: React.FC = () => {
                  </div>
 
                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {assemblySteps.map(step => {
-                       const task = itemTasks.find(t => t.step === step);
-                       const completedQty = task?.completed_qty || 0;
-                       const targetQty = task?.target_qty || item.quantity;
-                       const perc = targetQty > 0 ? Math.round((completedQty / targetQty) * 100) : 0;
-                       return (
-                          <div key={step} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-4">
-                             <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{step}</span>
-                                <span className={`text-xs font-black ${perc === 100 ? 'text-emerald-500' : 'text-blue-600'}`}>{perc}%</span>
+                    {assemblySteps
+                       .filter(step => {
+                          const task = itemTasks.find(t => t.step === step);
+                          const workflowStep = item.workflow?.find(config => config.step === step);
+                          const hasMachines = workflowStep?.machineIds && workflowStep.machineIds.length > 0;
+                          return task || hasMachines;
+                       })
+                       .map(step => {
+                          const task = itemTasks.find(t => t.step === step);
+                          const completedQty = task?.completed_qty || 0;
+                          const targetQty = task?.target_qty || item.quantity;
+                          const perc = targetQty > 0 ? Math.round((completedQty / targetQty) * 100) : 0;
+                          return (
+                             <div key={step} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-4">
+                                <div className="flex justify-between items-center">
+                                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{step}</span>
+                                   <span className={`text-xs font-black ${perc === 100 ? 'text-emerald-500' : 'text-blue-600'}`}>{perc}%</span>
+                                </div>
+                                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                   <div className={`h-full transition-all duration-700 ${perc === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${perc}%`}} />
+                                </div>
+                                <div className="flex justify-between items-end">
+                                   <div><p className="text-[8px] font-black text-slate-400 uppercase">Input</p><p className="text-xl font-black text-slate-900">{completedQty}</p></div>
+                                   <div className="text-right"><p className="text-[8px] font-black text-slate-400 uppercase">Target</p><p className="text-sm font-black text-slate-500">{targetQty}</p></div>
+                                </div>
                              </div>
-                             <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                                <div className={`h-full transition-all duration-700 ${perc === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${perc}%`}} />
-                             </div>
-                             <div className="flex justify-between items-end">
-                                <div><p className="text-[8px] font-black text-slate-400 uppercase">Input</p><p className="text-xl font-black text-slate-900">{completedQty}</p></div>
-                                <div className="text-right"><p className="text-[8px] font-black text-slate-400 uppercase">Target</p><p className="text-sm font-black text-slate-500">{targetQty}</p></div>
-                             </div>
-                          </div>
-                       );
-                    })}
+                          );
+                       })}
                  </div>
               </div>
             </div>
@@ -631,7 +715,10 @@ export const ProjectDetail: React.FC = () => {
            <div className="bg-white rounded-[56px] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 overflow-hidden">
               <div className="p-12 border-b flex justify-between items-center bg-slate-50">
                  <div><h2 className="text-3xl font-black text-slate-900 uppercase">Konfigurasi Rakitan</h2><p className="text-[10px] font-black text-blue-600 uppercase mt-2">Daftar Komponen & Alur Bahan Mentah</p></div>
-                 <button onClick={() => setIsSubModalOpen(null)} className="p-4 text-slate-400 hover:bg-slate-200 rounded-full transition-all"><X size={32}/></button>
+                 <button onClick={() => {
+                   setIsSubModalOpen(null);
+                   setNewSub({ name: '', qtyPerParent: 1, materialId: '', processes: [] });
+                 }} className="p-4 text-slate-400 hover:bg-slate-200 rounded-full transition-all"><X size={32}/></button>
               </div>
               <div className="p-12 overflow-y-auto space-y-12 custom-scrollbar">
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 bg-slate-100 p-10 rounded-[48px] border-2 border-white shadow-inner">
@@ -643,7 +730,7 @@ export const ProjectDetail: React.FC = () => {
                        <label className="text-[10px] font-black text-slate-400 uppercase ml-4">MATERIAL</label>
                        <select className="w-full p-5 bg-white border border-slate-200 rounded-[28px] font-black outline-none" value={newSub.materialId} onChange={e => setNewSub({...newSub, materialId: e.target.value})}>
                           <option value="">Pilih...</option>
-                          {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                          {apiMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                        </select>
                     </div>
                     <div className="space-y-2">
@@ -742,14 +829,71 @@ export const ProjectDetail: React.FC = () => {
                             setWorkflowConfig(newFlow);
                          }}>
                             <option value="">Pilih Mesin / Station...</option>
-                            {machines.filter(m => m.type === config.step).map(m => <option key={m.id} value={m.id}>{m.name} ({m.code})</option>)}
+                            {apiMachines.length > 0 ? (
+                              apiMachines.filter(m => m.type === config.step).map(m => (
+                                <option key={m.id} value={m.id}>{m.name} ({m.code})</option>
+                              ))
+                            ) : (
+                              <option value="" disabled>Memuat mesin...</option>
+                            )}
                          </select>
                       </div>
                    </div>
                  ))}
               </div>
               <div className="p-12 border-t flex justify-end">
-                 <button onClick={() => { validateWorkflow(isFlowModalOpen!, workflowConfig); setIsFlowModalOpen(null); }} className="px-16 py-6 bg-blue-600 text-white rounded-[32px] font-black uppercase text-sm tracking-[0.2em] shadow-2xl flex items-center gap-4 hover:bg-emerald-600 transition-all active:scale-95"><Save size={24}/> TERBITKAN SEMUA TUGAS</button>
+                 <button onClick={async () => {
+                   // Convert allocations to machineIds format for API
+                   const transformedWorkflow = workflowConfig.map(step => ({
+                     ...step,
+                     machineIds: step.allocations?.map(a => a.machineId).filter(Boolean) || []
+                   }));
+
+                   // Update item workflow via API
+                   if (isFlowModalOpen) {
+                     try {
+                       const itemId = isFlowModalOpen;
+                       const updateRes = await apiClient.updateProjectItem(itemId, { workflow: transformedWorkflow });
+
+                       if (updateRes.success) {
+                         // Also validate with Zustand for task creation
+                         validateWorkflow(itemId, transformedWorkflow);
+
+                         // Create tasks via API
+                         const selectedItem = projectItems.find(i => i.id === itemId);
+                         if (selectedItem && project) {
+                           for (const step of transformedWorkflow) {
+                             for (const machineId of step.machineIds) {
+                               const machineData = apiMachines.find(m => String(m.id) === String(machineId));
+                               if (machineData) {
+                                 await apiClient.createTask({
+                                   project_id: project.id,
+                                   project_name: project.name,
+                                   item_id: itemId,
+                                   item_name: selectedItem.name,
+                                   step: step.step,
+                                   machine_id: machineId,
+                                   target_qty: selectedItem.quantity,
+                                   completed_qty: 0,
+                                   defect_qty: 0,
+                                   status: 'PENDING'
+                                 });
+                               }
+                             }
+                           }
+                         }
+
+                         setIsFlowModalOpen(null);
+                         alert('Workflow berhasil diterbitkan dan tugas telah dibuat');
+                       } else {
+                         alert('Gagal menyimpan workflow: ' + updateRes.message);
+                       }
+                     } catch (err) {
+                       console.error('Error publishing workflow:', err);
+                       alert('Error: ' + (err instanceof Error ? err.message : 'Terjadi kesalahan'));
+                     }
+                   }
+                 }} className="px-16 py-6 bg-blue-600 text-white rounded-[32px] font-black uppercase text-sm tracking-[0.2em] shadow-2xl flex items-center gap-4 hover:bg-emerald-600 transition-all active:scale-95"><Save size={24}/> TERBITKAN SEMUA TUGAS</button>
               </div>
            </div>
         </div>
